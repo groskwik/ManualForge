@@ -2,8 +2,6 @@
 # **ManualForge**
 *A GUI tool to preview, process, print, and manage PDF manuals for eBay sellers and collectors*
 
-![ManualForge Logo](./logo.png)
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)  
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)]()  
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)]()
@@ -16,7 +14,7 @@
 
 It provides a single interface to:
 
-- Preview PDF covers  
+- Preview PDF covers  [cover.py](https://github.com/groskwik/cover)
 - Extract first pages  
 - Generate high‑resolution PNG previews  
 - Create 2‑up / 4‑up printable PDFs  
