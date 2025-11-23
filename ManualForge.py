@@ -325,7 +325,7 @@ window = sg.Window(
     "ManualForge",
     layout,
     resizable=True,
-    icon="ebay.ico" if os.path.exists("ebay.ico") else None,
+    icon="logo.ico" if os.path.exists("logo.ico") else None,
     finalize=True,
 )
 # Bind Enter for each tab's send input
