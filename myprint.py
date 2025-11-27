@@ -4,7 +4,8 @@ import subprocess
 import time
 from PyPDF2 import PdfReader
 import psutil
-from listpdf import PRINT_SETTINGS
+import json
+from pathlib import Path
 
 # Path to SumatraPDF executable
 SUMATRA_PATH = r"C:\portableapps\sumatrapdf\sumatrapdf.exe"
@@ -91,6 +92,13 @@ def print_pdf(printer_name, partial_name):
 
     file_name_without_ext = os.path.splitext(os.path.basename(pdf_path))[0].lower()
     
+    DB_PATH = Path(__file__).with_name("print_settings.json")
+
+    with DB_PATH.open("r", encoding="utf-8") as f:
+        _RAW_PRINT_SETTINGS = json.load(f)
+
+    # Normalize keys once (case-insensitive access)
+    PRINT_SETTINGS = {k.lower(): v for k, v in _RAW_PRINT_SETTINGS.items()}
     # Get predefined print settings 
     print_settings = PRINT_SETTINGS.get(file_name_without_ext, [f"color,1-{page_count},fit,paper=letter"])
     print("")

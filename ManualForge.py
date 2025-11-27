@@ -230,6 +230,12 @@ col_right_options = [
         key="-RATIO-",
         enable_events=True,
     )],
+    [sg.Checkbox(
+        "Angle",
+        key="-ANGLE-",
+        default=False,
+        tooltip="Use angled cover layout when running cover.py",
+    )],
 ]
 
 # ---------- tab builder ----------
@@ -612,7 +618,9 @@ while True:
                 extra_args.append(f"--ratio={ratio}")
                 if coverfile:
                     extra_args.append(f"--cover={coverfile}")
-
+                # If angle is checked and we're running cover.py, add --angle
+                if script == "cover.py" and values.get("-ANGLE-", False):
+                    extra_args.append("--angle")
             if script == "lightscribe.py":
                 coverfile = values["-COVERFILE-"].strip()
                 if coverfile:

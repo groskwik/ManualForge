@@ -1,0 +1,552 @@
+{
+  "singer 3337": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,duplex,fit,paper=letter",
+    "monochrome,3-34,duplex,fit,paper=letter",
+    "color,102,simplex,fit,paper=letter"
+  ],
+  "singer 5500": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,duplex,fit,paper=letter",
+    "monochrome,3-64,duplex,fit,paper=letter"
+  ],
+  "ti-81": [
+    "monochrome,1-193,duplex,fit,paper=letter"
+  ],
+  "Sharp PC-1500A": [
+    "monochrome,1-168,duplex,fit,paper=letter"
+  ],
+    "Tascam 2488neo": [
+    "monochrome,1-124,duplex,fit,paper=letter"
+  ],
+  "yaesu vx7r": [
+    "monochrome,1-111,duplex,fit,paper=letter"
+  ],
+  "tandy 100": [
+    "monochrome,1-230,duplex,fit,paper=letter"
+  ],
+  "hp87": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,3-64,duplex,fit,paper=letter"
+  ],
+  "singer 3342": [
+    "color,1,simplex,fit,paper=letter,landscape",
+    "monochrome,2,duplexshort,fit,paper=letter,landscape",
+    "monochrome,3-35,duplexshort,fit,paper=letter,landscape"
+  ],
+  "singer 4432": [
+    "color,1,simplex,fit,paper=letter,landscape",
+    "monochrome,2,duplexshort,fit,paper=letter,landscape",
+    "monochrome,3-35,duplexshort,fit,paper=letter,landscape"
+  ],
+  "kodak pixpro az528": [
+    "color,1,simplex,fit,paper=letter,landscape",
+    "monochrome,3-124,duplexshort,fit,paper=letter,landscape"
+  ],
+  "hp27s19b-tech-en": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,3-110,duplex,fit,paper=letter"
+  ],
+  "hp35-survey-en": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,3-66,duplex,fit,paper=letter"
+  ],
+  "hp35s-surveying-solutions": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,3-72,duplex,fit,paper=letter"
+  ],
+  "akai m-9": [
+    "color,1,simplex,fit,paper=letter,landscape",
+    "monochrome,2,duplexshort,fit,paper=letter,landscape",
+    "monochrome,3-26,duplexshort,fit,paper=letter,landscape"
+  ],
+  "otari mtr-10ii": [
+    "monochrome,1-180,duplex,fit,paper=letter",
+    "color,181,188,duplex,fit,paper=letter",
+    "monochrome,189-290,duplex,fit,paper=letter"
+  ],
+  "hp41c41cv41cx-sm-en": [
+    "color,1-2,duplex,fit,paper=letter",
+    "monochrome,3-210,duplex,fit,paper=letter"
+  ],
+  "red epic scarlet": [
+    "color,1-248,duplex,fit,paper=letter"
+  ],
+  "blackmagic cinema camera and production camera": [
+    "color,1-43,duplexshort,fit,paper=letter,landscape"
+  ],
+  "Elecraft KX2": [
+    "color,1-76,duplexshort,fit,paper=letter,landscape"
+  ],
+  "Canon Elph 190 IS": [
+    "color,1-143,duplexshort,fit,paper=letter,landscape"
+  ],
+  "red dsmc2 dragon-x": [
+    "color,1-236,duplex,fit,paper=letter"
+  ],
+  "baby lock ble1at-2-instruction-manual": [
+    "color,1-54,duplex,fit,paper=letter"
+  ],
+  "tektronix mso22": [
+    "color,1-257,duplex,fit,paper=letter"
+  ],
+  "hp15c-oh-en": [
+    "color,1-300,duplex,fit,paper=letter"
+  ],
+  "singer 2263": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,duplex,fit,paper=letter",
+    "monochrome,3-62,duplex,fit,paper=letter"
+  ],
+  "bernette b05": [
+    "color,1-82,duplex,fit,paper=letter"
+  ],
+  "tandy 100 service manual": [
+    "monochrome,1-127,duplex,fit,paper=letter"
+  ],
+  "nikon z6 z7 user": [
+    "monochrome,1-272,duplex,fit,paper=letter"
+  ],
+  "zoom hd8": [
+    "monochrome,1-213,duplex,fit,paper=letter"
+  ],
+  "zoom r8": [
+    "monochrome,1-140,duplex,fit,paper=letter"
+  ],
+  "nikon d7200": [
+    "monochrome,1-416,duplex,fit,paper=letter"
+  ],
+  "nikon d4": [
+    "monochrome,1-484,duplex,fit,paper=letter"
+  ],
+  "sony pxw-fs7": [
+    "monochrome,1-145,duplex,fit,paper=letter"
+  ],
+  "hp97-sm-en": [
+    "color,1-2,duplex,fit,paper=letter",
+    "monochrome,3-159,duplex,fit,paper=letter"
+  ],
+  "hp71-sm-en": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,3-158,duplex,fit,paper=letter"
+  ],
+  "hp75-sm-en": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,3-137,duplex,fit,paper=letter",
+    "color,138,simplex,fit,paper=letter"
+  ],
+  "canon powershot sx40hs": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-219,duplex,fit,paper=letter"
+  ],
+  "bernette b77": [
+    "color,1-103,duplex,fit,paper=letter"
+  ],
+  "pioneer dvl-909": [
+    "monochrome,1,simplex,fit,paper=letter",
+    "monochrome,3,simplex,fit,paper=letter",
+    "monochrome,140,duplex,fit,paper=letter"
+  ],
+  "boss br-1200cd": [
+    "monochrome,1-364,duplex,fit,paper=letter"
+  ],
+  "tektronix 475": [
+    "monochrome,1-240,duplex,fit,paper=letter"
+  ],
+  "panasonic gh2": [
+    "monochrome,1-208,duplex,fit,paper=letter"
+  ],
+  "olympus om-1": [
+    "monochrome,1-342,duplex,fit,paper=letter"
+  ],
+  "yaesu ft-991 transceiver": [
+    "monochrome,1-158,duplex,fit,paper=letter"
+  ],
+  "nikon d800": [
+    "monochrome,1-472,duplex,fit,paper=letter"
+  ],
+  "nikon d80": [
+    "monochrome,1-162,duplex,fit,paper=letter"
+  ],
+  "kenwood tm-v71a": [
+    "monochrome,1-107,duplex,fit,paper=letter"
+  ],
+  "yaesu ft-857d": [
+    "monochrome,1-136,duplex,fit,paper=letter"
+  ],
+  "Tandy Color Computer 1 Service": [
+    "monochrome,1-60,duplex,fit,paper=letter"
+  ],
+  "pentax 645z": [
+    "color,1,simplex,fit,paper=letter",
+    "color,2,simplex,fit,paper=letter",
+    "color,3-112,duplexshort,fit,paper=letter"
+  ],
+  "pentax 645d": [
+    "color,1,simplex,fit,paper=letter",
+    "color,2,simplex,fit,paper=letter",
+    "color,3-108,duplexshort,fit,paper=letter"
+  ],
+  "canon powershot sx530 hs": [
+    "color,1-169,duplexshort,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx730 hs": [
+    "color,1-189,duplexshort,fit,paper=letter,landscape"
+  ],
+  "pentax kf": [
+    "monochrome,1,simplexshort,fit,paper=letter,landscape",
+    "monochrome,2,simplexshort,fit,paper=letter,landscape",
+    "monochrome,3-152,duplexshort,fit,paper=letter,landscape"
+  ],
+  "pentax k3 iii": [
+    "monochrome,1,simplexshort,fit,paper=letter,landscape",
+    "monochrome,2,simplexshort,fit,paper=letter,landscape",
+    "monochrome,3-148,duplexshort,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx700 hs": [
+    "color,1-198,duplexshort,fit,paper=letter,landscape"
+  ],
+  "kodak pixpro az252": [
+    "color,1-96,duplexshort,fit,paper=letter,landscape"
+  ],
+  "minolta mn67z": [
+    "color,1-139,duplexshort,fit,paper=letter,landscape"
+  ],
+  "leica sl2": [
+    "color,1-220,duplexshort,fit,paper=letter,landscape"
+  ],
+  "leica sl2-s": [
+    "color,1-299,duplexshort,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx710 hs": [
+    "color,1-177,duplexshort,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx430 is": [
+    "color,1-146,duplexshort,fit,paper=letter,landscape"
+  ],
+  "leica sl": [
+    "color,1-146,duplexshort,fit,paper=letter,landscape"
+  ],
+  "hp48g-qsg-en": [
+    "color,1-116,duplex,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx540 hs": [
+    "color,1-186,duplexshort,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx740 hs": [
+    "color,1-130,duplexshort,fit,paper=letter,landscape"
+  ],
+  "voicelive 3": [
+    "color,1-186,duplexshort,fit,paper=letter,landscape"
+  ],
+  "voicelive 3 extreme": [
+    "color,1-202,duplexshort,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx720 hs": [
+    "color,1-185,duplexshort,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx610 hs": [
+    "color,1-162,duplexshort,fit,paper=letter,landscape"
+  ],
+  "leica q3": [
+    "color,1-269,duplexshort,fit,paper=letter,landscape"
+  ],
+  "minolta mn40z": [
+    "color,1-105,duplexshort,fit,paper=letter,landscape"
+  ],
+  "leica q2": [
+    "color,1-233,duplexshort,fit,paper=letter,landscape"
+  ],
+  "brother innov-is xp3 embroidery": [
+    "color,1-212,duplex,fit,paper=letter"
+  ],
+  "brother xr1355": [
+    "color,1-112,duplex,fit,paper=letter"
+  ],
+  "humminbird helix 5": [
+    "color,1-215,duplex,fit,paper=letter"
+  ],
+  "ricoh grii": [
+    "color,1-184,duplex,fit,paper=letter"
+  ],
+  "ricoh griii": [
+    "color,1-170,duplex,fit,paper=letter"
+  ],
+  "panasonic dmc-fz1000": [
+    "color,1-367,duplex,fit,paper=letter"
+  ],
+  "humminbird helix series operations manual": [
+    "color,1-348,duplex,fit,paper=letter"
+  ],
+  "canon xa70 xa75": [
+    "color,1-154,duplex,fit,paper=letter"
+  ],
+  "leica q3 43": [
+    "color,1-264,duplex,fit,paper=letter"
+  ],
+  "leica d-lux 7": [
+    "color,1-293,duplex,fit,paper=letter"
+  ],
+  "leica d-lux 8": [
+    "color,1-215,duplex,fit,paper=letter"
+  ],
+  "canon eos 5d mark iv": [
+    "color,1-676,duplex,fit,paper=letter"
+  ],
+  "lowrance hds pro": [
+    "color,1-288,duplex,fit,paper=letter"
+  ],
+  "canon eos m50 mark ii": [
+    "color,1-709,duplex,fit,paper=letter"
+  ],
+  "nikon df": [
+    "monochrome,1-396,duplex,fit,paper=letter"
+  ],
+  "yamaha dgx-670": [
+    "monochrome,1-116,duplex,fit,paper=letter"
+  ],
+  "yamaha dgx-670 - reference": [
+    "color,1-93,duplex,fit,paper=letter"
+  ],
+  "nikon d3100 reference": [
+    "monochrome,1-214,duplex,fit,paper=letter"
+  ],
+  "jvc gy-hm200u": [
+    "monochrome,1-184,duplex,fit,paper=letter"
+  ],
+  "red dsmc2 helium": [
+    "color,1-238,duplex,fit,paper=letter"
+  ],
+  "bernina 570qe": [
+    "color,1-214,duplex,fit,paper=letter"
+  ],
+  "husqvarna viking designer i": [
+    "color,1-117,duplex,fit,paper=letter"
+  ],
+  "husqvarna viking emerald": [
+    "color,1-2,duplex,fit,paper=letter",
+    "monochrome,3-46,duplex,fit,paper=letter",
+    "color,47-48,duplex,fit,paper=letter"
+  ],
+  "yamaha dgx-230": [
+    "color,1-2,duplex,fit,paper=letter",
+    "monochrome,3-120,duplex,fit,paper=letter"
+  ],
+  "bernina virtuosa 153 163": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-71,duplex,fit,paper=letter"
+  ],
+  "hp16c-oh-en": [
+    "color,1-140,duplex,fit,paper=letter"
+  ],
+  "hp42s-elec-en": [
+    "color,1-2,duplex,fit,paper=letter",
+    "monochrome,3-164,duplex,fit,paper=letter"
+  ],
+  "olympus tg-6": [
+    "monochrome,1-166,duplex,fit,paper=letter"
+  ],
+  "olympus e-m5": [
+    "monochrome,1-133,duplex,fit,paper=letter"
+  ],
+  "olympus e-510": [
+    "monochrome,1-140,duplex,fit,paper=letter"
+  ],
+  "olympus tg-5": [
+    "monochrome,1-134,duplex,fit,paper=letter"
+  ],
+  "gopro hero 9 black camera": [
+    "color,3-145,duplex,fit,paper=letter"
+  ],
+  "baby lock blsa3-embroidery": [
+    "color,3-191,duplex,fit,paper=letter"
+  ],
+  "baby lock blsa3-sewing": [
+    "color,3-215,duplex,fit,paper=letter"
+  ],
+  "baby lock blsa3-embroidery-design-guide": [
+    "color,3-191,duplex,fit,paper=letter"
+  ],
+  "hp42s-easycourse": [
+    "monochrome,3-388,duplex,fit,paper=letter"
+  ],
+  "hp15c-ce-afh-en": [
+    "color,1-227,duplex,fit,paper=letter"
+  ],
+  "hp15c-ce-oh-en": [
+    "color,1-307,duplex,fit,paper=letter"
+  ],
+  "hp15c-afh-en": [
+    "color,1-228,duplex,fit,paper=letter"
+  ],
+  "ti nspire cxii cas guidebook": [
+    "color,1-97,duplex,fit,paper=letter"
+  ],
+  "pfaff creative icon": [
+    "color,1-211,duplex,fit,paper=letter"
+  ],
+  "ti nspire cx reference": [
+    "color,1-2,duplex,fit,paper=letter",
+    "monochrome,3-70,duplex,fit,paper=letter",
+    "monochrome,71-150,duplex,fit,paper=letter",
+    "monochrome,151-204,duplex,fit,paper=letter",
+    "color,205-226,duplex,fit,paper=letter",
+    "monochrome,227-254,duplex,fit,paper=letter"
+  ],
+  "hp12c-oh-en": [
+    "color,1-252,duplex,fit,paper=letter"
+  ],
+  "hp42s-easycourse2": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,3-100,duplex,fit,paper=letter",
+    "monochrome,101-200,duplex,fit,paper=letter",
+    "monochrome,201-300,duplex,fit,paper=letter",
+    "monochrome,301-388,duplex,fit,paper=letter"
+  ],
+  "hp12c-ce-oh-en": [
+    "color,1-252,duplex,fit,paper=letter"
+  ],
+  "panasonic gx1": [
+    "color,1-225,duplex,fit,paper=letter"
+  ],
+  "nikon coolpix p950": [
+    "color,1-308,duplex,fit,paper=letter"
+  ],
+  "tascam dp-03sd": [
+    "monochrome,1-76,duplex,fit,paper=letter"
+  ],
+  "tascam dp-24sd": [
+    "monochrome,1-8,duplex,fit,paper=letter",
+    "color,9-18,duplex,fit,paper=letter",
+    "monochrome,19-22,duplex,fit,paper=letter",
+    "color,23-70,duplex,fit,paper=letter",
+    "monochrome,71-80,duplex,fit,paper=letter"
+  ],
+  "boss dr-880": [
+    "monochrome,1-168,duplex,fit,paper=letter"
+  ],
+  "brother jx2517": [
+    "monochrome,1-40,duplex,fit,paper=letter"
+  ],
+  "sony f65": [
+    "monochrome,1-98,duplex,fit,paper=letter"
+  ],
+  "kodak pixpro fz55": [
+    "color,1-83,duplexshort,fit,paper=letter,landscape"
+  ],
+  "lowrance hook series": [
+    "color,1-57,duplexshort,fit,paper=letter,landscape"
+  ],
+  "akai 4000ds mk2": [
+    "color,1-18,duplexshort,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx420 is": [
+    "color,1-149,duplexshort,fit,paper=letter,landscape"
+  ],
+  "hp82441a-om-en": [
+    "color,1-2,duplex,fit,paper=letter",
+    "monochrome,3-156,duplex,fit,paper=letter"
+  ],
+  "hp82104a-sm-en": [
+    "color,1-2,duplex,fit,paper=letter",
+    "monochrome,3-38,duplex,fit,paper=letter"
+  ],
+  "hp82211a-om-en": [
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-100,duplex,fit,paper=letter",
+    "monochrome,101-200,duplex,fit,paper=letter",
+    "monochrome,201-240,duplex,fit,paper=letter"
+  ],
+  "nikon d3500": [
+    "monochrome,1-36,duplex,fit,paper=letter"
+  ],
+  "nikon d3300": [
+    "monochrome,1-144,duplex,fit,paper=letter"
+  ],
+  "nikon d6 reference": [
+    "color,1-1202,duplex,fit,paper=letter"
+  ],
+  "nikon d5": [
+    "monochrome,1-420,duplex,fit,paper=letter"
+  ],
+  "panasonic g7": [
+    "color,1-76,duplex,fit,paper=letter"
+  ],
+  "sony pmw-f55": [
+    "monochrome,1-150,duplex,fit,paper=letter"
+  ],
+  "jvc gy-hm250u gy-hm250e_v2": [
+    "monochrome,1-212,duplex,fit,paper=letter"
+  ],
+  "jvc gy-hm250u gy-hm250e": [
+    "monochrome,1-200,duplex,fit,paper=letter"
+  ],
+  "nikon d850": [
+    "monochrome,1-400,duplex,fit,paper=letter"
+  ],
+  "wp34s-bg-en": [
+    "color,1-187,duplex,fit,paper=letter"
+  ],
+  "brother innov-is xp2 embroidery design guide": [
+    "color,1-40,duplex,fit,paper=letter",
+    "color,41-80,duplex,fit,paper=letter",
+    "color,81-120,duplex,fit,paper=letter",
+    "color,121-156,duplex,fit,paper=letter"
+  ],
+  "brother innov-is xp2 embroidery": [
+    "color,1-216,duplex,fit,paper=letter"
+  ],
+  "brother innov-is xp2 sewing": [
+    "color,1-236,duplex,fit,paper=letter"
+  ],
+  "nikon d6": [
+    "monochrome,1-316,duplex,fit,paper=letter"
+  ],
+  "nikon d780": [
+    "monochrome,1-132,duplex,fit,paper=letter"
+  ],
+  "hp71-rpn": [
+    "monochrome,1-12,duplex,fit,paper=letter"
+  ],
+  "tascam dp-02": [
+    "monochrome,1-80,duplex,fit,paper=letter"
+  ],
+  "tandy Color Computer 3 Service": [
+    "monochrome,1-129,duplex,fit,paper=letter"
+  ],
+  "canon eos 6d": [
+    "color,1-404,duplex,fit,paper=letter"
+  ],
+  "hp6797-pac-eleceng-en": [
+    "color,1-138,duplex,fit,paper=letter"
+  ],
+  "dm42": [
+    "color,1-29,duplex,fit,paper=letter"
+  ],
+  "brother sq-9185": [
+    "color,1-116,duplex,fit,paper=letter"
+  ],
+  "dm41x_user_manual": [
+    "color,3-44,duplex,fit,paper=letter"
+  ],
+  "tandy 100 hidden power": [
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-257,duplex,fit,paper=letter"
+  ],
+  "canon powershot sx30 is": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-196,duplex,fit,paper=letter"
+  ],
+  "tandy 100 reference": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-126,duplex,fit,paper=letter"
+  ],
+  "brother ce8080 ce8080prw": [
+    "color,1-72,duplex,fit,paper=letter"
+  ]
+}
+
