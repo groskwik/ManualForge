@@ -94,6 +94,32 @@ def is_supported_image(path):
     except Exception:
         return False
 
+def compute_weight_from_pages(pages: int) -> str:
+    """
+    Compute manual weight from number of pages.
+    Returns a formatted string like '10 oz' or '1 lb 3 oz'.
+    """
+    if pages <= 0:
+        return "--"
+
+    A = 0.082
+    O = pages * A
+
+    E = 1.0
+    if pages > 200:
+        E = 1.6
+
+    O += E
+
+    pounds = int(O // 16)
+    ounces = int(O % 16)
+
+    if pounds == 0:
+        return f"{ounces} oz"
+    else:
+        return f"{pounds} lb {ounces} oz"
+
+
 def load_image_as_png_bytes(path, max_height=800):
     """Open jpg/png → resize → return PNG bytes safe for sg.Image."""
     if not os.path.exists(path):
@@ -321,7 +347,8 @@ layout = [
     [
         sg.Text("Status:", size=(8, 1)),
         sg.Text("Idle", key="-STATUS-", expand_x=True),
-        sg.Text("Pages: --", key="-PAGEINFO-", size=(15, 1), justification="right"),
+        #sg.Text("Pages: --", key="-PAGEINFO-", size=(15, 1), justification="right"),
+        sg.Text("Pages: -- | Weight: --", key="-PAGEINFO-", size=(30, 1), justification="right"),
         sg.Button("Switch Font", key="-SWITCH_FONT-"),
         sg.Button("Exit"),
     ],
@@ -391,7 +418,7 @@ def set_pdf_preview(pdf_path, page=1):
     current_pdf_path = pdf_path
     if not pdf_path or not os.path.exists(pdf_path):
         current_pdf_pagecount = None
-        window["-PAGEINFO-"].update("Pages: --")
+        window["-PAGEINFO-"].update("Pages: -- | Weight: --")
         window["-PREVIEW-"].update(data=None)
         window["-PREVIEWPAGE-"].update(values=["1"], value="1")
         return
@@ -399,7 +426,8 @@ def set_pdf_preview(pdf_path, page=1):
     pagecount = get_pdf_page_count(pdf_path)
     current_pdf_pagecount = pagecount
     if pagecount:
-        window["-PAGEINFO-"].update(f"Pages: {pagecount}")
+        weight_str = compute_weight_from_pages(pagecount)
+        window["-PAGEINFO-"].update(f"Pages: {pagecount} | Weight: {weight_str}")
         pages = [str(i) for i in range(1, pagecount + 1)]
         window["-PREVIEWPAGE-"].update(values=pages, value=str(min(page, pagecount)))
         img_bytes = render_pdf_page_to_bytes(pdf_path, page_index=min(page, pagecount) - 1)
