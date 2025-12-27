@@ -1,6 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from __future__ import annotations
+
+import os
+import time
 from pathlib import Path
 
+import psutil
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
@@ -10,7 +17,6 @@ from selenium.common.exceptions import TimeoutException
 
 
 URL = "https://www.ebay.com/sh/ord/?filter=status:AWAITING_SHIPMENT"
-
 CHECKBOX_ID = "grid-table-bulk-checkbox"
 
 
@@ -30,6 +36,40 @@ def js_force_check(driver, el, checked=True):
         """,
         el, checked
     )
+
+
+def kill_chrome_using_profile(profile_dir: str) -> None:
+    """
+    Kill only Chrome processes that were launched with --user-data-dir=<profile_dir>.
+
+    This prevents "DevToolsActivePort file doesn't exist" crashes caused by
+    stale Chrome instances locking the profile.
+
+    Requires: pip install psutil
+    """
+    profile_dir_abs = os.path.abspath(profile_dir)
+
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            name = (proc.info.get("name") or "").lower()
+            if "chrome" not in name:
+                continue
+
+            cmdline_list = proc.info.get("cmdline") or []
+            if not cmdline_list:
+                continue
+
+            cmdline = " ".join(cmdline_list)
+            # Match the profile path anywhere in the command line
+            if profile_dir_abs in cmdline:
+                print(f"[INFO] Killing stale Chrome PID={proc.pid} using profile: {profile_dir_abs}")
+                proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            # AccessDenied can occur on hardened systems; ignore and continue
+            pass
+
+    # Small pause to allow Windows to release locks
+    time.sleep(0.5)
 
 
 def select_all_orders_on_page(driver, timeout=30):
@@ -132,21 +172,43 @@ def click_review_purchase(driver, timeout=30):
 
 
 def ensure_logged_in_or_pause(driver):
-    cur = driver.current_url.lower()
+    cur = (driver.current_url or "").lower()
     if "signin" in cur or "login" in cur:
         print("Redirected to sign-in. Please log in in the Chrome window, then press Enter here.")
         input()
 
 
-def main():
+def build_driver(profile_dir: Path) -> webdriver.Chrome:
     options = webdriver.ChromeOptions()
 
-    # Dedicated profile folder so you remain logged in between runs
-    profile_dir = Path(__file__).with_name("chrome_profile_selenium")
-    profile_dir.mkdir(exist_ok=True)
+    # Use a dedicated Selenium profile so you stay logged in between runs.
+    # IMPORTANT: only one Chrome instance may use this profile at a time.
     options.add_argument(f"--user-data-dir={str(profile_dir)}")
+    options.add_argument("--profile-directory=Default")
+
+    # Stability flags (helpful on some Windows setups)
+    options.add_argument("--no-first-run")
+    options.add_argument("--no-default-browser-check")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--remote-debugging-port=0")
 
     driver = webdriver.Chrome(options=options)
+    driver.set_window_size(1400, 900)
+    return driver
+
+
+def main():
+    # Dedicated profile folder next to the script
+    profile_dir = Path(__file__).with_name("chrome_profile_selenium")
+    profile_dir.mkdir(exist_ok=True)
+
+    # Option 1: kill only Chrome processes using THIS profile folder
+    kill_chrome_using_profile(str(profile_dir))
+
+    driver = build_driver(profile_dir)
 
     try:
         # 1) Open shipment page
@@ -158,7 +220,7 @@ def main():
         ensure_logged_in_or_pause(driver)
         driver.get(URL)
 
-        # 3) Select all orders on this page (optional, but kept from the previous code)
+        # 3) Select all orders on this page (optional)
         select_all_orders_on_page(driver)
         print("Select-all checkbox state:", driver.find_element(By.ID, CHECKBOX_ID).is_selected())
 
@@ -178,4 +240,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

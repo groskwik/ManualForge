@@ -22,6 +22,7 @@ PRINTERS = {
     "2": "Brother HL-L8360CDW series"
 }
 
+
 def other_python_scripts_running():
     current_pid = os.getpid()
     for proc in psutil.process_iter(['pid', 'name']):
@@ -32,6 +33,7 @@ def other_python_scripts_running():
             continue
     return False
 
+
 def select_printer():
     """Prompts the user to select a printer."""
     print("\nSelect a printer:")
@@ -40,6 +42,7 @@ def select_printer():
 
     choice = input("Enter the number of the printer: ").strip()
     return PRINTERS.get(choice, PRINTERS["1"])
+
 
 def find_pdf(partial_name):
     """Finds a PDF file in the specified folders that contains the given string (case insensitive)."""
@@ -69,6 +72,7 @@ def find_pdf(partial_name):
 
     return matching_files[0]  # Return the only match
 
+
 def get_pdf_page_count(pdf_path):
     """Returns the number of pages in the given PDF file."""
     try:
@@ -78,6 +82,7 @@ def get_pdf_page_count(pdf_path):
     except Exception as e:
         print(f"Error reading PDF: {e}")
         return None
+
 
 def parse_page_token(token):
     """
@@ -95,6 +100,7 @@ def parse_page_token(token):
             return ("range", int(a), int(b))
     return (None,)
 
+
 def extract_page_selector_index(parts):
     """
     Find the index in the comma-split setting parts that corresponds to page selection.
@@ -108,6 +114,7 @@ def extract_page_selector_index(parts):
         if kind in ("single", "range"):
             return i
     return None
+
 
 def clip_setting_to_custom_range(setting, custom_start, custom_end):
     """
@@ -143,6 +150,7 @@ def clip_setting_to_custom_range(setting, custom_start, custom_end):
 
     return None
 
+
 def compute_delay_between_batches(printer_name):
     """
     Keep your existing logic (including the special-case printer).
@@ -152,10 +160,16 @@ def compute_delay_between_batches(printer_name):
         delay_between_batches = 480
     return delay_between_batches
 
-def print_one_setting(pdf_path, setting, printer_name, batch_size=70):
+
+def print_one_setting(pdf_path, setting, printer_name, batch_size=70, small_range_no_wait_threshold=10):
     """
     Print according to one setting entry, using your SumatraPDF command format.
     Handles both single pages and ranges with batching.
+
+    Change requested:
+      - If the total page span in THIS setting is < small_range_no_wait_threshold (default 10),
+        do NOT wait between batches (or after it).
+      - Larger ranges keep the normal delay between batches.
     """
     delay_between_batches = compute_delay_between_batches(printer_name)
 
@@ -183,6 +197,9 @@ def print_one_setting(pdf_path, setting, printer_name, batch_size=70):
         start_page, end_page = parsed[1], parsed[2]
         current_page = start_page
 
+        total_span = end_page - start_page + 1
+        no_wait_for_this_setting = total_span < small_range_no_wait_threshold
+
         while current_page <= end_page:
             batch_end = min(current_page + batch_size - 1, end_page)
             batch_range = f"{current_page}-{batch_end}"
@@ -196,15 +213,21 @@ def print_one_setting(pdf_path, setting, printer_name, batch_size=70):
             subprocess.run([SUMATRA_PATH, "-print-to", printer_name, "-print-settings", batch_setting, pdf_path], check=True)
 
             current_page = batch_end + 1
-            if current_page <= end_page:
+
+            # Delay only if:
+            #  - there is another batch to print for this setting
+            #  - AND this setting is not considered a "small range"
+            if current_page <= end_page and (not no_wait_for_this_setting):
                 print(f"Waiting for {delay_between_batches // 60} minutes before next batch...")
                 time.sleep(delay_between_batches)
+
         return
 
     # Fallback
     print(f"Printing (unrecognized page selector): {setting}")
     subprocess.run([SUMATRA_PATH, "-print-to", printer_name, "-print-settings", setting, pdf_path], check=True)
     time.sleep(10)
+
 
 def print_pdf(printer_name, partial_name):
     """Prints a PDF with predefined settings or user-defined page ranges."""
@@ -227,7 +250,7 @@ def print_pdf(printer_name, partial_name):
 
     PRINT_SETTINGS = {k.lower(): v for k, v in _RAW_PRINT_SETTINGS.items()}
 
-    # Default if no entry found (kept simple but adds duplex to match typical use)
+    # Default if no entry found
     default_setting = f"color,1-{page_count},duplex,fit,paper=letter"
     print_settings = PRINT_SETTINGS.get(file_name_without_ext, [default_setting])
 
@@ -237,12 +260,6 @@ def print_pdf(printer_name, partial_name):
         print(setting)
 
     custom_range = input("\nEnter the page range to print (e.g., 40-215), or press Enter for default: ").strip()
-
-    # Optional job-wait logic preserved (still commented out)
-    # print("Wait for other jobs to finish...")
-    # while other_python_scripts_running():
-    #     time.sleep(10)
-    # print("All other jobs are done. Proceeding...")
 
     effective_settings = list(print_settings)
 
@@ -285,7 +302,15 @@ def print_pdf(printer_name, partial_name):
 
     batch_size = 70
     for setting in effective_settings:
-        print_one_setting(pdf_path, setting, printer_name, batch_size=batch_size)
+        # NEW behavior: removes wait only when THIS setting range < 10 pages
+        print_one_setting(
+            pdf_path,
+            setting,
+            printer_name,
+            batch_size=batch_size,
+            small_range_no_wait_threshold=10,
+        )
+
 
 if __name__ == "__main__":
     selected_printer = select_printer()

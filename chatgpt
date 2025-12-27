@@ -13,16 +13,16 @@ do not report this informattion in the log window but on the status are of the p
 add a button next to orders awaiting shipment called "Print label"
     this button runs the script "ebay_shipping.py"
 
-add a button next to Print label called "Restock"
+add a button next to Print label button called "Restock"
     this button runs the script "restock.py"
     
-add a button next to Restock called "list orders awaiting shipment"
+add a button next to Restock button called "list orders awaiting shipment"
     this button runs the command "python ebay_scrape.py --headless --stdout-short"
 
     of course the standard output of each command is shown in the active console
 
 add a button below these buttons "Check orders and print"
-    this button will run the following command
+    this button will run the following commands
 
 python ebay_scrape.py --headless --stdout-short
 
@@ -38,10 +38,53 @@ python ebay_linker.py ^
   --myprint C:\Users\benoi\Downloads\ManualForge\myprint.py
 
 you will get the printer number for this command line from the selected printer in the GUI
+    (2 in the example above)
 
  next to this button there will be an option to :
     always ask printer 
 in that caser pass the argument to the command line
     --always-ask-printer
     instead of 
-  --printer 2
+  --printer 1/2
+
+
+
+
+
+
+
+    Excellent
+
+    decrease the hight of the console window by an equivalent of about 5 lines
+make sure in the GUI behavior that the status bar (with total funds, switch font and so on) is protected when resizing to small (currently it "disappears")
+    Force monospace font on the consolde window for
+    check orders and print, restock, print label, list orders awaiting shipment
+    
+     
+   for manage_print_Settings, I want to use it in a "wizard way"
+
+    first select select the pdf to choose the eaxt same way as in myprint.py
+  once the pdf is selected the program gets the number of pages by himself from the pdf
+ then the program asks color type withe 2 answers
+       
+    color or black and white
+
+    if color the print settings is
+    "color,1-248,duplex,fit,paper=letter"
+    where 248 is the nmber of pages in my example
+    if black and white it is
+    "monochrome,1-248,duplex,fit,paper=letter"
+    then the program ask if the page is portrait or landscape
+    if portrait do not change the current settings
+    if landscape change it to
+    "color,1-248,duplexshort,fit,paper=letter,landscape"
+    again it is an example ain this example do not change the first item which is the color that is already set
+    at the end if the setting is color and portrait the program ask if the setting should be applied to the first page only and the rest is in monochrome
+    if yes th setting becomes
+    "color,1,simplex,fit,paper=letter"
+    "monochrome,2,simplex,fit,paper=letter"
+    "monochrome,3-248,simplex,fit,paper=letter"
+
+    
+
+    

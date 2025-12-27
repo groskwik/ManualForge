@@ -317,7 +317,8 @@ def main():
 
         print()
         if args.stdout_short:
-            short_headers = ["item_id", "title", "item_url"]
+            #short_headers = ["item_id", "title", "item_url"]
+            short_headers = ["item_id", "title"]
             print_table(rows, headers=short_headers, max_widths={"title": 80, "item_url": 80})
         else:
             print_table(rows, max_widths={"title": 60, "item_url": 60})

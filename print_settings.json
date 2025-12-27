@@ -25,7 +25,7 @@
   ],
   "hp16c-easycourse": [
     "monochrome,1-260,duplex,fit,paper=letter"
-  ], 
+  ],
   "nikon d3200": [
     "monochrome,1-92,duplex,fit,paper=letter"
   ],
@@ -62,19 +62,16 @@
   "Tascam Model 24": [
     "monochrome,1-172,duplex,fit,paper=letter"
   ],
-    "Olympus E-M10 Mark IV": [
+  "Olympus E-M10 Mark IV": [
     "monochrome,1-186,duplex,fit,paper=letter"
   ],
-    "hp12c-prof-real-estate": [
+  "hp12c-prof-real-estate": [
     "monochrome,1-364,duplex,fit,paper=letter"
   ],
-    "Tascam 2488neo": [
-    "monochrome,1-364,duplex,fit,paper=letter"
-  ],
-    "Tascam 2488neo": [
+  "Tascam 2488neo": [
     "monochrome,1-124,duplex,fit,paper=letter"
   ],
-    "Tandy Micro Computer Technical Reference Book2": [
+  "Tandy Micro Computer Technical Reference Book2": [
     "monochrome,1-122,duplex,fit,paper=letter"
   ],
   "Sony DVP-CX995V": [
@@ -145,7 +142,7 @@
   "Canon Elph 190 IS": [
     "color,1-143,duplexshort,fit,paper=letter,landscape"
   ],
-    "leica M EV1": [
+  "leica M EV1": [
     "color,1-164,duplex,fit,paper=letter"
   ],
   "red dsmc2 dragon-x": [
@@ -219,14 +216,14 @@
     "monochrome,1-364,duplex,fit,paper=letter"
   ],
   "tektronix 475": [
-      "monochrome,1-30,duplex,fit,paper=letter",
-      "monochrome,31-60,duplex,fit,paper=letter",
-      "monochrome,61-90,duplex,fit,paper=letter",
-      "monochrome,91-120,duplex,fit,paper=letter",
-      "monochrome,121-150,duplex,fit,paper=letter",
-      "monochrome,151-180,duplex,fit,paper=letter",
-      "monochrome,181-210,duplex,fit,paper=letter",
-      "monochrome,211-240,duplex,fit,paper=letter"
+    "monochrome,1-30,duplex,fit,paper=letter",
+    "monochrome,31-60,duplex,fit,paper=letter",
+    "monochrome,61-90,duplex,fit,paper=letter",
+    "monochrome,91-120,duplex,fit,paper=letter",
+    "monochrome,121-150,duplex,fit,paper=letter",
+    "monochrome,151-180,duplex,fit,paper=letter",
+    "monochrome,181-210,duplex,fit,paper=letter",
+    "monochrome,211-240,duplex,fit,paper=letter"
   ],
   "panasonic gh2": [
     "monochrome,1-208,duplex,fit,paper=letter"
@@ -238,12 +235,12 @@
     "monochrome,1-342,duplex,fit,paper=letter"
   ],
   "yaesu ft-991A transceiver": [
-      "monochrome,1-10,duplex,fit,paper=letter",
-      "color,11-14,duplex,fit,paper=letter",
-      "monochrome,15-22,duplex,fit,paper=letter",
-      "color,23-26,duplex,fit,paper=letter",
-      "monochrome,27-36,duplex,fit,paper=letter",
-      "color,37-148,duplex,fit,paper=letter",
+    "monochrome,1-10,duplex,fit,paper=letter",
+    "color,11-14,duplex,fit,paper=letter",
+    "monochrome,15-22,duplex,fit,paper=letter",
+    "color,23-26,duplex,fit,paper=letter",
+    "monochrome,27-36,duplex,fit,paper=letter",
+    "color,37-148,duplex,fit,paper=letter",
     "monochrome,149-158,duplex,fit,paper=letter"
   ],
   "nikon d800": [
@@ -590,6 +587,15 @@
   "nikon d780": [
     "monochrome,1-132,duplex,fit,paper=letter"
   ],
+  "Olympus E-M10 Mark II": [
+    "monochrome,1-171,duplex,fit,paper=letter"
+  ],
+  "Kubota B2301 B2601": [
+    "monochrome,1-95,duplex,fit,paper=letter"
+  ],
+  "Olympus E-M10": [
+    "monochrome,1-161,duplex,fit,paper=letter"
+  ],
   "hp71-rpn": [
     "monochrome,1-12,duplex,fit,paper=letter"
   ],
@@ -633,6 +639,11 @@
   ],
   "brother ce8080 ce8080prw": [
     "color,1-72,duplex,fit,paper=letter"
+  ],
+  "leica sl3": [
+    "color,1-341,duplexshort,fit,paper=letter,landscape"
+  ],
+  "tesla cybertruck": [
+    "color,1-322,duplex,fit,paper=letter"
   ]
 }
-

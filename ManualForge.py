@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#!/usr/bin/env python
 import PySimpleGUI as sg
 import subprocess
 import threading
@@ -9,7 +10,7 @@ import json
 import re
 import webbrowser
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 # try to import PyMuPDF for PDF preview
 try:
@@ -37,12 +38,91 @@ ISO_FOLDER = r"C:\Users\benoi\Downloads\Lightscribe"
 # Listing DB (JSON) in current working directory
 LISTINGS_JSON = "ebay_links.json"
 
+# eBay helper scripts
+REVENUE_SCRIPT = "ebay_revenue.py"
+SHIPPING_SCRIPT = "ebay_shipping.py"
+RESTOCK_SCRIPT = "restock.py"
+SCRAPE_SCRIPT = "ebay_scrape.py"
+LINKER_SCRIPT = "ebay_linker.py"
+
+# Used by ebay_linker.py
+MYPRINT_PATH = r"C:\Users\benoi\Downloads\ManualForge\myprint.py"
+AWAITING_CSV = "awaiting_shipment_items.csv"
+
+PRINT_SETTINGS_JSON = "print_settings.json"
+
+
 # Default is now Tahoma (as requested). Toggle will switch to Consolas.
 DEFAULT_OUTPUT_FONT = ("Tahoma", 10)
 ALT_OUTPUT_FONT = ("Consolas", 10)
 MAX_TABS = 6
 
 # ---------- helpers ----------
+def get_print_settings_summary(pdf_path: str | None, db: dict) -> str:
+    """
+    Return a one-line summary of print settings for this PDF.
+    - Case-insensitive match on PDF basename
+    - Joins settings with ' | '
+    - Trimmed to 100 characters + '...' if needed
+    """
+    if not pdf_path:
+        return "Print settings: --"
+
+    base = os.path.splitext(os.path.basename(pdf_path))[0].strip().lower()
+    if not base:
+        return "Print settings: --"
+
+    # case-insensitive lookup
+    for k, v in db.items():
+        if str(k).strip().lower() == base and isinstance(v, list) and v:
+            summary = " | ".join(v)
+            if len(summary) > 100:
+                summary = summary[:100] + "..."
+            return f"Print settings: {summary}"
+
+    return "Print settings: none"
+
+def set_status_with_print_settings(msg: str, pdf_path: str | None):
+    """
+    Update status bar message + print settings summary (trimmed).
+    Reloads DB so edits via manager are immediately visible.
+    """
+    db = load_print_settings_db(os.path.join(os.getcwd(), PRINT_SETTINGS_JSON))
+    ps_summary = get_print_settings_summary(pdf_path, db)
+    window["-STATUS-"].update(f"{msg} | {ps_summary}")
+
+def load_print_settings_db(path: str) -> dict:
+    """
+    Load print_settings.json. Expected format: { "manualname": [ "...", ... ], ... }
+    Returns {} if missing/invalid.
+    """
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def print_settings_has_pdf(pdf_path: str | None, db: dict) -> bool:
+    """
+    Case-insensitive match on PDF basename (without extension).
+    """
+    if not pdf_path:
+        return False
+    base = os.path.splitext(os.path.basename(pdf_path))[0].strip().lower()
+    if not base:
+        return False
+
+    # Case-insensitive lookup: normalize DB keys once
+    # (fast enough for your size; simplest + robust)
+    db_keys_lower = {str(k).strip().lower() for k in db.keys()}
+    return base in db_keys_lower
+
+def force_console_monospace(tab_idx: int):
+    window[f"-OUTPUT-{tab_idx}-"].update(font=ALT_OUTPUT_FONT)
+
 def list_cover_images():
     """List all PNG/JPG in cwd, excluding middle.png and lightscribe_ebay.jpg, cover.png first."""
     exts = {".png", ".jpg"}
@@ -99,7 +179,7 @@ def get_pdf_page_count(pdf_path):
     except Exception:
         return None
 
-def render_pdf_page_to_bytes(pdf_path, page_index=0, max_height=800):
+def render_pdf_page_to_bytes(pdf_path, page_index=0, max_height=700):
     if fitz is None:
         return None
     try:
@@ -126,31 +206,22 @@ def is_supported_image(path):
         return False
 
 def compute_weight_from_pages(pages: int) -> str:
-    """
-    Compute manual weight from number of pages.
-    Returns a formatted string like '10 oz' or '1 lb 3 oz'.
-    """
+    """Compute manual weight from number of pages. Returns '10 oz' or '1 lb 3 oz'."""
     if pages <= 0:
         return "--"
-
     A = 0.082
     O = pages * A
-
     E = 1.0
     if pages > 200:
         E = 1.6
-
     O += E
-
     pounds = int(O // 16)
     ounces = int(O % 16)
-
     if pounds == 0:
         return f"{ounces} oz"
-    else:
-        return f"{pounds} lb {ounces} oz"
+    return f"{pounds} lb {ounces} oz"
 
-def load_image_as_png_bytes(path, max_height=800):
+def load_image_as_png_bytes(path, max_height=700):
     """Open jpg/png → resize → return PNG bytes safe for sg.Image."""
     if not os.path.exists(path):
         return None
@@ -189,10 +260,7 @@ def open_url(url: str):
 
 # ---------- Listing DB helpers ----------
 def load_listings_db(path: str) -> dict:
-    """
-    Load JSON mapping of manual_basename -> {url:..., itemId:...} (flexible)
-    Returns empty dict if not found or invalid.
-    """
+    """Load JSON mapping of manual_basename -> {url:..., itemId:...} (flexible)."""
     if not os.path.exists(path):
         return {}
     try:
@@ -211,17 +279,10 @@ def extract_item_id_from_url(url: str) -> str | None:
     return m.group(1) if m else None
 
 def get_listing_info_for_pdf(pdf_path: str, listings_db: dict) -> tuple[str | None, str | None]:
-    """
-    Returns (listing_url, item_id) for the given PDF, based on PDF basename.
-    Accepts entries like:
-      { "manualname": "https://..." }
-      { "manualname": {"url": "..."} }
-      { "manualname": {"itemId": "357..."} }
-    """
+    """Returns (listing_url, item_id) for the given PDF, based on PDF basename."""
     if not pdf_path:
         return (None, None)
     base = os.path.splitext(os.path.basename(pdf_path))[0]
-
     entry = listings_db.get(base)
     if entry is None:
         return (None, None)
@@ -239,14 +300,10 @@ def get_listing_info_for_pdf(pdf_path: str, listings_db: dict) -> tuple[str | No
             url = entry["url"].strip() or None
         if "itemId" in entry and isinstance(entry["itemId"], str):
             item_id = entry["itemId"].strip() or None
-
         if item_id is None and url is not None:
             item_id = extract_item_id_from_url(url)
-
-        # If we only have item_id, we can still build a listing URL
         if url is None and item_id is not None:
             url = f"https://www.ebay.com/itm/{item_id}"
-
         return (url, item_id)
 
     return (None, None)
@@ -264,7 +321,6 @@ ORDERS_URL = "https://www.ebay.com/sh/ord/?filter=status:ALL_ORDERS"
 ORDERS_AWAITING_URL = "https://www.ebay.com/sh/ord/?filter=status:AWAITING_SHIPMENT"
 
 # ---------- tools ----------
-# NOTE: batch_cover.py removed; replaced with isoburn.py
 TOOLS = [
     ("Print manual", "myprint.py"),
     ("2 Half-letter pdf", "2up.py"),
@@ -299,11 +355,13 @@ current_pdf_pagecount = None
 
 # listing state
 listings_db = load_listings_db(os.path.join(os.getcwd(), LISTINGS_JSON))
+print_settings_db = load_print_settings_db(os.path.join(os.getcwd(), PRINT_SETTINGS_JSON))
 current_listing_url = None
 current_item_id = None
 
 # per-tab process state
 procs = {i: None for i in range(1, MAX_TABS + 1)}
+stop_flags = {i: threading.Event() for i in range(1, MAX_TABS + 1)}
 output_queues = {i: queue.Queue() for i in range(1, MAX_TABS + 1)}
 last_run_script = {i: None for i in range(1, MAX_TABS + 1)}
 last_generated_cover_path = {i: None for i in range(1, MAX_TABS + 1)}
@@ -355,6 +413,12 @@ col_left_options = [
         enable_events=True,
         tooltip="If multiple PDFs match, pick the one to auto-answer to the script",
     )],
+    [sg.Button(
+        "Manage print settings",
+        key="-MANAGE_PRINT_SETTINGS-",
+        pad=((0, 0), (8, 0))   # ← adds vertical space ABOVE the button
+    )]
+
 ]
 
 col_mid_options = [
@@ -378,7 +442,6 @@ col_mid_options = [
     ],
 ]
 
-# ISO UI is placed below Angle (as requested)
 col_right_options = [
     [sg.Text("Ratio:", tooltip="Scale the cover inside the base image (0.3 → 0.7)")],
     [sg.Slider(
@@ -430,7 +493,7 @@ def make_console_tab(i: int, visible: bool):
         [
             [sg.Multiline(
                 "",
-                size=(90, 20),  # decreased height (was 25) to make room for ISO UI
+                size=(90, 15),  # reduced to make room for additional UI
                 key=f"-OUTPUT-{i}-",
                 autoscroll=True,
                 font=DEFAULT_OUTPUT_FONT,
@@ -492,7 +555,7 @@ left_column = [
 
 right_column = [
     [sg.Text("Preview:")],
-    [sg.Image(key="-PREVIEW-", size=(400, 800))],
+    [sg.Image(key="-PREVIEW-", size=(400, 650))],
     [sg.Push(), sg.Button("← Prev", key="-PREV_PAGE-"), sg.Button("Next →", key="-NEXT_PAGE-"), sg.Push()],
     [
         sg.Push(),
@@ -511,6 +574,15 @@ right_column = [
         sg.Push(),
         sg.Button("Orders", key="-ORDERS-"),
         sg.Button("Orders awaiting shipment", key="-ORDERS_AWAITING-"),
+        sg.Button("Print label", key="-PRINT_LABEL-"),
+        sg.Button("Restock", key="-RESTOCK-"),
+        sg.Button("List orders awaiting shipment", key="-LIST_AWAITING-"),
+        sg.Push(),
+    ],
+    [
+        sg.Push(),
+        sg.Button("Check orders and print", key="-CHECK_AND_PRINT-"),
+        sg.Checkbox("Always ask printer", key="-ALWAYS_ASK_PRINTER-", default=False),
         sg.Push(),
     ],
 ]
@@ -523,6 +595,7 @@ layout = [
     [
         sg.Text("Status:", size=(8, 1)),
         sg.Text("Idle", key="-STATUS-", expand_x=True),
+        sg.Text("Total funds: --", key="-FUNDS-", size=(18, 1), justification="right"),
         sg.Text("Pages: -- | Weight: --", key="-PAGEINFO-", size=(30, 1), justification="right"),
         sg.Button("Switch Font", key="-SWITCH_FONT-"),
         sg.Button("Exit"),
@@ -533,16 +606,19 @@ window = sg.Window(
     "ManualForge",
     layout,
     resizable=True,
-    location=(300, 0),  # <-- top-left of primary screen
+    location=(0, 0),  # top of screen
     icon="logo.ico" if os.path.exists("logo.ico") else None,
     finalize=True,
 )
+# Prevent resizing so small that the status bar row disappears
+#try:
+#    window.TKroot.minsize(950, 650)  # adjust to taste
+#except Exception:
+#    pass
+
 
 for i in range(1, MAX_TABS + 1):
     window[f"-SEND-{i}-"].bind("<Return>", "_ENTER")
-
-# Ensure listing buttons correct at startup
-update_listing_buttons_state()
 
 # ---------- subprocess I/O ----------
 def stream_reader_char(stream, q):
@@ -557,12 +633,14 @@ def reader_thread(tab_idx, proc, q):
     threading.Thread(target=stream_reader_char, args=(proc.stdout, q), daemon=True).start()
     threading.Thread(target=stream_reader_char, args=(proc.stderr, q), daemon=True).start()
 
-def run_script(tab_idx, script_path, extra_args, auto_inputs=None):
-    cmd = [sys.executable, "-u", script_path]
-    if extra_args:
-        cmd.extend(extra_args)
+def _start_process(tab_idx: int, cmd: List[str], status_label: str):
+    """Start a process and stream output to the tab console."""
+    # clear any previous stop flag
+    stop_flags[tab_idx].clear()
+
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+
     try:
         procs[tab_idx] = subprocess.Popen(
             cmd,
@@ -573,18 +651,28 @@ def run_script(tab_idx, script_path, extra_args, auto_inputs=None):
             bufsize=0,
             env=env,
         )
-        last_run_script[tab_idx] = os.path.basename(script_path)
     except FileNotFoundError:
-        output_queues[tab_idx].put(f"ERROR: could not start {script_path}\n")
-        window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+        output_queues[tab_idx].put(f"ERROR: Command not found: {cmd[0]}\n")
+        window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: command not found")
+        procs[tab_idx] = None
         return
 
+    last_run_script[tab_idx] = status_label
     reader_thread(tab_idx, procs[tab_idx], output_queues[tab_idx])
     output_queues[tab_idx].put(f"Started (Tab {tab_idx}): {' '.join(cmd)}\n")
-    window["-STATUS-"].update(f"Tab {tab_idx}: Running {os.path.basename(script_path)}")
+    window["-STATUS-"].update(f"Tab {tab_idx}: {status_label}")
     window[f"-SEND-{tab_idx}-"].set_focus()
 
-    if auto_inputs:
+def run_script(tab_idx, script_path, extra_args, auto_inputs=None):
+    """Run a python script (interactive OK) and optionally feed auto_inputs."""
+    cmd = [sys.executable, "-u", script_path]
+    if extra_args:
+        cmd.extend(extra_args)
+
+    _start_process(tab_idx, cmd, f"Running {os.path.basename(script_path)}")
+
+    # feed auto inputs
+    if auto_inputs and procs[tab_idx] and procs[tab_idx].poll() is None:
         for item in auto_inputs:
             try:
                 procs[tab_idx].stdin.write(item + "\n")
@@ -592,7 +680,46 @@ def run_script(tab_idx, script_path, extra_args, auto_inputs=None):
             except Exception as e:
                 output_queues[tab_idx].put(f"ERROR sending auto input: {e}\n")
 
-# ---------- preview helpers ----------
+def run_python_cmd(tab_idx: int, args: List[str], label: str):
+    """Run `python <args...>` and stream output to console."""
+    cmd = [sys.executable, "-u", *args]
+    _start_process(tab_idx, cmd, label)
+
+def run_sequence_in_thread(tab_idx: int, commands: List[List[str]], labels: List[str]):
+    """Run a sequence of commands (each is a full cmd list) in a background thread, streaming output."""
+    def worker():
+        for cmd, label in zip(commands, labels):
+            if stop_flags[tab_idx].is_set():
+                output_queues[tab_idx].put("\n[Sequence cancelled]\n")
+                break
+
+            output_queues[tab_idx].put("\n" + "=" * 70 + "\n")
+            output_queues[tab_idx].put(f"{label}\n")
+            output_queues[tab_idx].put("=" * 70 + "\n")
+
+            _start_process(tab_idx, cmd, label)
+            p = procs[tab_idx]
+            if not p:
+                break
+
+            # wait until finishes or cancelled
+            while p.poll() is None:
+                if stop_flags[tab_idx].is_set():
+                    try:
+                        p.terminate()
+                    except Exception:
+                        pass
+                    break
+                threading.Event().wait(0.1)
+
+            # ensure process slot cleared by main loop (we also clear here to avoid next cmd racing)
+            procs[tab_idx] = None
+
+        window["-STATUS-"].update(f"Tab {tab_idx}: Idle")
+
+    threading.Thread(target=worker, daemon=True).start()
+
+# ---------- preview + listing helpers ----------
 def refresh_listing_for_pdf(pdf_path: str | None):
     """Update current listing variables and enable/disable buttons."""
     global current_listing_url, current_item_id
@@ -612,8 +739,9 @@ def set_pdf_preview(pdf_path, page=1):
     """Set current_pdf_path, update page count, populate combobox, render page."""
     global current_pdf_path, current_pdf_pagecount
     current_pdf_path = pdf_path
+    
+    set_status_with_print_settings("PDF selected", pdf_path)
 
-    # Listing buttons depend on current PDF selection
     refresh_listing_for_pdf(pdf_path)
 
     if not pdf_path or not os.path.exists(pdf_path):
@@ -621,6 +749,7 @@ def set_pdf_preview(pdf_path, page=1):
         window["-PAGEINFO-"].update("Pages: -- | Weight: --")
         window["-PREVIEW-"].update(data=None)
         window["-PREVIEWPAGE-"].update(values=["1"], value="1")
+        set_status_with_print_settings("No PDF selected", None)   # NEW (optional)
         return
 
     pagecount = get_pdf_page_count(pdf_path)
@@ -631,22 +760,18 @@ def set_pdf_preview(pdf_path, page=1):
         pages = [str(i) for i in range(1, pagecount + 1)]
         window["-PREVIEWPAGE-"].update(values=pages, value=str(min(page, pagecount)))
         img_bytes = render_pdf_page_to_bytes(pdf_path, page_index=min(page, pagecount) - 1)
-        if img_bytes:
-            window["-PREVIEW-"].update(data=img_bytes)
-        else:
-            window["-PREVIEW-"].update(data=None)
+        window["-PREVIEW-"].update(data=img_bytes if img_bytes else None)
     else:
         window["-PAGEINFO-"].update("Pages: -- | Weight: --")
         window["-PREVIEWPAGE-"].update(values=["1"], value="1")
         window["-PREVIEW-"].update(data=None)
 
 def update_preview_from_image(path):
-    img_bytes = load_image_as_png_bytes(path, max_height=800)
+    img_bytes = load_image_as_png_bytes(path, max_height=700)
     if img_bytes:
         window["-PREVIEW-"].update(data=img_bytes)
 
 def render_current_preview_page(values):
-    """Render the page number currently selected in the combobox."""
     if not current_pdf_path or not current_pdf_pagecount:
         return
     try:
@@ -658,9 +783,7 @@ def render_current_preview_page(values):
     if img_bytes:
         window["-PREVIEW-"].update(data=img_bytes)
 
-# ---------- tab utils ----------
 def select_tab(idx):
-    """Select tab idx (1-based) in the TabGroup."""
     try:
         window["-TABS-"].Widget.select(idx - 1)
     except Exception:
@@ -674,26 +797,52 @@ def get_selected_burner(values) -> str:
     return "isoburn"
 
 def get_selected_iso_path(values) -> str | None:
-    """
-    Returns full path to the currently selected ISO (from the ISO combobox),
-    or None if not selected / not found.
-    """
     chosen = values.get("-ISO_RESULT-", "(no matches)")
     if not chosen or chosen == "(no matches)":
         return None
-
-    # current_iso_matches is your in-memory list of Path objects
     for p in current_iso_matches:
         if p.name == chosen:
             return str(p.resolve())
-
-    # fallback: build from ISO_FOLDER if list is stale
     candidate = os.path.join(ISO_FOLDER, chosen)
     if os.path.exists(candidate):
         return os.path.abspath(candidate)
-
     return None
 
+def get_selected_printer_number(values) -> int:
+    # matches your existing logic: 1 if PRN1 checked else 2
+    return 1 if values.get("-PRN1-", False) else 2
+
+# ---------- revenue at startup ----------
+TOTAL_FUNDS_RE = re.compile(r"Total\s+funds:\s*\$?\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
+
+def update_total_funds_at_startup():
+    """
+    Runs ebay_revenue.py once.
+    Updates the GUI field -FUNDS-.
+    Does NOT write to console.
+    """
+    script_path = os.path.join(os.getcwd(), REVENUE_SCRIPT)
+    if not os.path.exists(script_path):
+        window["-FUNDS-"].update("Total funds: --")
+        return
+    try:
+        r = subprocess.run(
+            [sys.executable, "-u", script_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        out = (r.stdout or "") + "\n" + (r.stderr or "")
+        m = TOTAL_FUNDS_RE.search(out)
+        if m:
+            window["-FUNDS-"].update(f"Total funds: {m.group(1)}")
+        else:
+            window["-FUNDS-"].update("Total funds: --")
+    except Exception:
+        window["-FUNDS-"].update("Total funds: --")
+
+update_listing_buttons_state()
+update_total_funds_at_startup()
 
 # ---------- main loop ----------
 while True:
@@ -702,7 +851,10 @@ while True:
     if event in (sg.WIN_CLOSED, "Exit"):
         for i in range(1, MAX_TABS + 1):
             if procs[i] and procs[i].poll() is None:
-                procs[i].terminate()
+                try:
+                    procs[i].terminate()
+                except Exception:
+                    pass
         break
 
     # handle tab change
@@ -732,10 +884,7 @@ while True:
             matches = fuzzy_find_pdfs(text)
             current_fuzzy_matches = matches
             if matches:
-                window["-SEARCHRESULT-"].update(
-                    values=[os.path.basename(m) for m in matches],
-                    value=os.path.basename(matches[0]),
-                )
+                window["-SEARCHRESULT-"].update(values=[os.path.basename(m) for m in matches], value=os.path.basename(matches[0]))
                 set_pdf_preview(matches[0], page=1)
             else:
                 current_fuzzy_matches = []
@@ -745,7 +894,45 @@ while True:
             current_fuzzy_matches = []
             window["-SEARCHRESULT-"].update(values=["(no matches)"], value="(no matches)")
             set_pdf_preview(None)
+            
+    if event == "-MANAGE_PRINT_SETTINGS-":
+        tab_idx = get_active_tab()
 
+        script_name = "manage_print_settings.py"
+        script_path = os.path.join(os.getcwd(), script_name)
+
+        # Optional: monospace in the console for this tool
+        window[f"-OUTPUT-{tab_idx}-"].update(font=ALT_OUTPUT_FONT)
+
+        if not os.path.exists(script_path):
+            output_queues[tab_idx].put(f"ERROR: {script_path} not found\n")
+            window["-STATUS-"].update("Manage print settings: script not found")
+        else:
+            extra_args = []
+            auto_inputs = []
+
+            # Same behavior as myprint.py BUT without printer selection
+            search_txt = values["-SEARCHTXT-"].strip()
+            if search_txt:
+                auto_inputs.append(search_txt)
+
+                # If we have multiple matches, send the chosen index like you do for myprint.py
+                if current_fuzzy_matches:
+                    chosen_basename = values["-SEARCHRESULT-"]
+                    if chosen_basename and chosen_basename != "(no matches)":
+                        # Only needed if there are multiple matches, but sending it is harmless
+                        # if the script prompts anyway.
+                        if len(current_fuzzy_matches) > 1:
+                            for idx, fullpath in enumerate(current_fuzzy_matches, start=1):
+                                if os.path.basename(fullpath) == chosen_basename:
+                                    auto_inputs.append(str(idx))
+                                    break
+                        else:
+                            # one match → select 1 (safe)
+                            auto_inputs.append("1")
+
+            run_script(tab_idx, script_path, extra_args=extra_args, auto_inputs=auto_inputs)
+            
     # user picks one of the PDF matches
     if event == "-SEARCHRESULT-":
         chosen = values["-SEARCHRESULT-"]
@@ -762,10 +949,7 @@ while True:
             iso_matches = fuzzy_find_isos(t)
             current_iso_matches = iso_matches
             if iso_matches:
-                window["-ISO_RESULT-"].update(
-                    values=[p.name for p in iso_matches],
-                    value=iso_matches[0].name,
-                )
+                window["-ISO_RESULT-"].update(values=[p.name for p in iso_matches], value=iso_matches[0].name)
             else:
                 current_iso_matches = []
                 window["-ISO_RESULT-"].update(values=["(no matches)"], value="(no matches)")
@@ -773,16 +957,11 @@ while True:
             current_iso_matches = []
             window["-ISO_RESULT-"].update(values=["(no matches)"], value="(no matches)")
 
-    # user picks one ISO match
-    if event == "-ISO_RESULT-":
-        # Nothing else to do; selection is used when running isoburn.py
-        pass
-
-    # user changes preview page via combobox
+    # user changes preview page
     if event == "-PREVIEWPAGE-":
         render_current_preview_page(values)
 
-    # arrow buttons under preview
+    # arrow buttons
     if event in ("-PREV_PAGE-", "-NEXT_PAGE-"):
         if current_pdf_pagecount:
             try:
@@ -796,14 +975,14 @@ while True:
             window["-PREVIEWPAGE-"].update(value=str(page_num))
             render_current_preview_page(values)
 
-    # open PDF with default app
+    # open PDF
     if event == "-OPENPDF-":
         if current_pdf_path and os.path.exists(current_pdf_path):
             open_with_default_app(current_pdf_path)
         else:
             output_queues[get_active_tab()].put("No PDF selected to open.\n")
 
-    # ----- Listing buttons (PDF-dependent) -----
+    # ----- Listing buttons -----
     if event == "-OPEN_LISTING-":
         if current_listing_url:
             open_url(current_listing_url)
@@ -828,14 +1007,92 @@ while True:
         else:
             output_queues[get_active_tab()].put("No itemId for current PDF (check ebay_links.json).\n")
 
-    # ----- Orders buttons (not PDF-dependent) -----
+    # ----- Orders buttons -----
     if event == "-ORDERS-":
         open_url(ORDERS_URL)
 
     if event == "-ORDERS_AWAITING-":
         open_url(ORDERS_AWAITING_URL)
 
-    # save current PDF preview page as JPG
+    # NEW: Print label -> ebay_shipping.py
+    if event == "-PRINT_LABEL-":
+        tab_idx = get_active_tab()
+        force_console_monospace(tab_idx)
+        script_path = os.path.join(os.getcwd(), SHIPPING_SCRIPT)
+        if not os.path.exists(script_path):
+            output_queues[tab_idx].put(f"ERROR: {script_path} not found\n")
+            window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+        else:
+            run_script(tab_idx, script_path, extra_args=[], auto_inputs=None)
+
+    # NEW: Restock -> restock.py
+    if event == "-RESTOCK-":
+        tab_idx = get_active_tab()
+        script_path = os.path.join(os.getcwd(), RESTOCK_SCRIPT)
+        if not os.path.exists(script_path):
+            output_queues[tab_idx].put(f"ERROR: {script_path} not found\n")
+            window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+        else:
+            run_script(tab_idx, script_path, extra_args=[], auto_inputs=None)
+
+    # NEW: List orders awaiting shipment -> python ebay_scrape.py --headless --stdout-short
+    if event == "-LIST_AWAITING-":
+        tab_idx = get_active_tab()
+        force_console_monospace(tab_idx)
+        script_path = os.path.join(os.getcwd(), SCRAPE_SCRIPT)
+        if not os.path.exists(script_path):
+            output_queues[tab_idx].put(f"ERROR: {script_path} not found\n")
+            window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+        else:
+            run_python_cmd(tab_idx, [SCRAPE_SCRIPT, "--headless", "--stdout-short"], "Listing awaiting shipment")
+
+    # NEW: Check orders and print -> run scrape, then linker with printer selection / always ask
+    if event == "-CHECK_AND_PRINT-":
+        tab_idx = get_active_tab()
+        force_console_monospace(tab_idx)
+
+        scrape_path = os.path.join(os.getcwd(), SCRAPE_SCRIPT)
+        linker_path = os.path.join(os.getcwd(), LINKER_SCRIPT)
+
+        if not os.path.exists(scrape_path):
+            output_queues[tab_idx].put(f"ERROR: {scrape_path} not found\n")
+            window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+        elif not os.path.exists(linker_path):
+            output_queues[tab_idx].put(f"ERROR: {linker_path} not found\n")
+            window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+        else:
+            # command 1
+            cmd1 = [sys.executable, "-u", SCRAPE_SCRIPT, "--headless", "--stdout-short"]
+
+            # command 2
+            cmd2 = [
+                sys.executable, "-u", LINKER_SCRIPT,
+                "--orders-csv", AWAITING_CSV,
+                "--links-json", LISTINGS_JSON,
+                "--out-links-json", LISTINGS_JSON,
+                "--recursive",
+                "--min-score", "60",
+                "--min-margin", "8",
+                "--print",
+                "--myprint", MYPRINT_PATH,
+            ]
+
+            if values.get("-ALWAYS_ASK_PRINTER-", False):
+                cmd2.extend(["--always-ask-printer"])
+            else:
+                prn = str(get_selected_printer_number(values))
+                cmd2.extend(["--printer", prn])
+
+            run_sequence_in_thread(
+                tab_idx,
+                commands=[cmd1, cmd2],
+                labels=[
+                    "ebay_scrape.py --headless --stdout-short",
+                    "ebay_linker.py (link + print)",
+                ],
+            )
+
+    # save current preview as JPG
     if event == "-SAVE_IMAGE-":
         tab_idx = get_active_tab()
 
@@ -862,13 +1119,11 @@ while True:
                 base = os.path.splitext(os.path.basename(current_pdf_path))[0]
                 out_name = f"{base}_p{page_num}.jpg"
                 out_path = os.path.join(os.getcwd(), out_name)
-
                 try:
                     bio = BytesIO(png_bytes)
                     img = Image.open(bio).convert("RGB")
                     img.save(out_path, "JPEG")
-                    msg = f"Saved preview as {out_name}\n"
-                    output_queues[tab_idx].put(msg)
+                    output_queues[tab_idx].put(f"Saved preview as {out_name}\n")
                     window["-STATUS-"].update(f"Saved preview as {out_name}")
                 except Exception as e:
                     output_queues[tab_idx].put(f"ERROR saving preview: {e}\n")
@@ -879,25 +1134,23 @@ while True:
         tab_idx = get_active_tab()
         script = event[1]
 
-        # --- Force monospace font for inventory.py ---
+        # If a process is already running in this tab, warn
+        if procs[tab_idx] and procs[tab_idx].poll() is None:
+            output_queues[tab_idx].put("A process is already running in this tab. Stop it first.\n")
+            continue
+
+        # inventory -> monospace
         if script == "inventory.py":
             window[f"-OUTPUT-{tab_idx}-"].update(font=ALT_OUTPUT_FONT)
 
+        # lightscribe print (external EXE or open .lsl if ISO selected)
         if script == "lightscribe_print":
-            tab_idx = get_active_tab()
             exe_path = r"C:\Program Files (x86)\LightScribe Template Labeler\TemplateLabeler.exe"
 
-            iso_path = None
-            try:
-                iso_path = get_selected_iso_path(values)
-            except Exception:
-                iso_path = None
-
-            # If an ISO is selected, try to open the matching .lsl
+            iso_path = get_selected_iso_path(values)
             if iso_path:
                 base = os.path.splitext(iso_path)[0]
                 lsl_path = base + ".lsl"
-
                 if os.path.exists(lsl_path):
                     try:
                         open_with_default_app(lsl_path)
@@ -906,14 +1159,13 @@ while True:
                     except Exception as e:
                         output_queues[tab_idx].put(f"ERROR opening .lsl: {e}\n")
                         window["-STATUS-"].update("ERROR opening .lsl")
-                    continue  # done
+                    continue
                 else:
                     output_queues[tab_idx].put(
                         f"WARNING: .lsl not found for selected ISO:\n  {lsl_path}\n"
                         "Opening TemplateLabeler.exe instead.\n"
                     )
 
-            # Default behavior: open TemplateLabeler.exe
             if os.path.exists(exe_path):
                 try:
                     subprocess.Popen([exe_path])
@@ -921,36 +1173,16 @@ while True:
                     window["-STATUS-"].update("Lightscribe Template Labeler started")
                 except Exception as e:
                     output_queues[tab_idx].put(f"ERROR launching TemplateLabeler.exe: {e}\n")
-                    window["-STATUS-"].update("Tab ERROR launching TemplateLabeler.exe")
+                    window["-STATUS-"].update("ERROR launching TemplateLabeler.exe")
             else:
                 output_queues[tab_idx].put(
                     "ERROR: TemplateLabeler.exe not found at:\n"
                     "  C:\\Program Files (x86)\\LightScribe Template Labeler\\TemplateLabeler.exe\n"
                 )
                 window["-STATUS-"].update("TemplateLabeler.exe not found")
-
-            continue  # skip normal python-script handling for this button
-
-        # --- special case: Lightscribe print (external EXE) ---
-        if script == "lightscribe_print":
-            exe_path = r"C:\Program Files (x86)\LightScribe Template Labeler\TemplateLabeler.exe"
-            if os.path.exists(exe_path):
-                try:
-                    subprocess.Popen([exe_path])
-                    output_queues[tab_idx].put(f"Started Lightscribe Template Labeler:\n  {exe_path}\n")
-                    window["-STATUS-"].update(f"Tab {tab_idx}: Lightscribe Template Labeler started")
-                except Exception as e:
-                    output_queues[tab_idx].put(f"ERROR launching TemplateLabeler.exe: {e}\n")
-                    window["-STATUS-"].update(f"Tab {tab_idx}: ERROR launching TemplateLabeler.exe")
-            else:
-                output_queues[tab_idx].put(
-                    "ERROR: TemplateLabeler.exe not found at:\n"
-                    "  C:\\Program Files (x86)\\LightScribe Template Labeler\\TemplateLabeler.exe\n"
-                )
-                window["-STATUS-"].update(f"Tab {tab_idx}: TemplateLabeler.exe not found")
             continue
 
-        # --- special case: isoburn.py (auto-answer ISO query + selection) ---
+        # isoburn.py special case (auto answer)
         if script == "isoburn.py":
             script_path = os.path.join(os.getcwd(), script)
             if not os.path.exists(script_path):
@@ -961,36 +1193,28 @@ while True:
             extra_args = []
             auto_inputs = []
 
-            # burner choice passed as argument
             burner = get_selected_burner(values)
             extra_args.append(f"--burner={burner}")
-            # keep default folder (isoburn.py already defaults), but pass it for clarity
             extra_args.append(f"--folder={ISO_FOLDER}")
 
-            # auto-answer prompts: query then match number (if multiple)
             iso_query = values.get("-ISO_SEARCHTXT-", "").strip()
             if iso_query:
                 auto_inputs.append(iso_query)
-
-                # if multiple matches, auto-send the chosen index
                 if current_iso_matches:
                     chosen_iso = values.get("-ISO_RESULT-", "(no matches)")
                     if chosen_iso != "(no matches)":
-                        # compute 1-based index inside current_iso_matches
                         idx_to_send = None
                         for idx, p in enumerate(current_iso_matches, start=1):
                             if p.name == chosen_iso:
                                 idx_to_send = idx
                                 break
-                        # if there is more than 1 match, sending the index is required;
-                        # if there is exactly 1 match, sending "1" is harmless.
                         if idx_to_send is not None:
                             auto_inputs.append(str(idx_to_send))
 
             run_script(tab_idx, script_path, extra_args, auto_inputs=auto_inputs)
             continue
 
-        # --- normal Python tools below ---
+        # normal python script tools
         script_path = os.path.join(os.getcwd(), script)
         if not os.path.exists(script_path):
             output_queues[tab_idx].put(f"ERROR: {script_path} not found\n")
@@ -1000,12 +1224,7 @@ while True:
             auto_inputs = []
             selected_pdf_basename = None
 
-            scripts_that_need_pdf = {
-                "myprint.py",
-                "cover.py",
-                "pdf2png.py",
-                "2up.py",
-            }
+            scripts_that_need_pdf = {"myprint.py", "cover.py", "pdf2png.py", "2up.py"}
 
             if script == "cover.py":
                 ratio = f"{values['-RATIO-']:.2f}"
@@ -1024,6 +1243,7 @@ while True:
             if script in scripts_that_need_pdf:
                 if script == "myprint.py":
                     auto_inputs.append("1" if values["-PRN1-"] else "2")
+
                 search_txt = values["-SEARCHTXT-"].strip()
                 if search_txt:
                     auto_inputs.append(search_txt)
@@ -1048,8 +1268,12 @@ while True:
     # per-tab controls: Stop / Clear / Send
     for i in range(1, MAX_TABS + 1):
         if event == f"-STOP-{i}-":
+            stop_flags[i].set()
             if procs[i] and procs[i].poll() is None:
-                procs[i].terminate()
+                try:
+                    procs[i].terminate()
+                except Exception:
+                    pass
                 output_queues[i].put("\n[Process stopped by user]\n")
                 window["-STATUS-"].update(f"Tab {i}: Stopped")
             else:
@@ -1090,11 +1314,11 @@ while True:
     for i in range(1, MAX_TABS + 1):
         if procs[i] and procs[i].poll() is not None:
             window["-STATUS-"].update(f"Tab {i}: Idle")
-            if last_run_script[i] == "lightscribe.py":
+            if last_run_script[i] == "Running lightscribe.py":
                 ls_path = os.path.join(os.getcwd(), "lightscribe_ebay.jpg")
                 if os.path.exists(ls_path):
                     update_preview_from_image(ls_path)
-            if last_run_script[i] == "cover.py":
+            if last_run_script[i] == "Running cover.py":
                 if last_generated_cover_path[i] and os.path.exists(last_generated_cover_path[i]):
                     update_preview_from_image(last_generated_cover_path[i])
             procs[i] = None
