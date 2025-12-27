@@ -14,6 +14,9 @@
     "monochrome,2,duplex,fit,paper=letter",
     "monochrome,3-64,duplex,fit,paper=letter"
   ],
+  "Roland GP100": [
+    "monochrome,1-92,duplex,fit,paper=letter"
+  ],
   "Sony PXW-FS5": [
     "monochrome,1-200,duplex,fit,paper=letter"
   ],
@@ -31,6 +34,9 @@
   ],
   "Sony DSC RX10M4": [
     "monochrome,1-40,duplex,fit,paper=letter"
+  ],
+  "TDK-DA-3826": [
+    "monochrome,1-28,duplex,fit,paper=letter"
   ],
   "Nikon Coolpix P100": [
     "monochrome,1-216,duplex,fit,paper=letter"
@@ -98,6 +104,9 @@
     "color,1,simplex,fit,paper=letter,landscape",
     "monochrome,3-124,duplexshort,fit,paper=letter,landscape"
   ],
+  "kodak pixpro az421": [
+    "color,1-107,duplexshort,fit,paper=letter,landscape"
+  ],
   "hp27s19b-tech-en": [
     "color,1,simplex,fit,paper=letter",
     "monochrome,3-110,duplex,fit,paper=letter"
@@ -135,6 +144,9 @@
   ],
   "Canon Elph 190 IS": [
     "color,1-143,duplexshort,fit,paper=letter,landscape"
+  ],
+    "leica M EV1": [
+    "color,1-164,duplex,fit,paper=letter"
   ],
   "red dsmc2 dragon-x": [
     "color,1-236,duplex,fit,paper=letter"
@@ -200,14 +212,21 @@
   ],
   "pioneer dvl-909": [
     "monochrome,1,simplex,fit,paper=letter",
-    "monochrome,3,simplex,fit,paper=letter",
-    "monochrome,140,duplex,fit,paper=letter"
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-140,duplex,fit,paper=letter"
   ],
   "boss br-1200cd": [
     "monochrome,1-364,duplex,fit,paper=letter"
   ],
   "tektronix 475": [
-    "monochrome,1-240,duplex,fit,paper=letter"
+      "monochrome,1-30,duplex,fit,paper=letter",
+      "monochrome,31-60,duplex,fit,paper=letter",
+      "monochrome,61-90,duplex,fit,paper=letter",
+      "monochrome,91-120,duplex,fit,paper=letter",
+      "monochrome,121-150,duplex,fit,paper=letter",
+      "monochrome,151-180,duplex,fit,paper=letter",
+      "monochrome,181-210,duplex,fit,paper=letter",
+      "monochrome,211-240,duplex,fit,paper=letter"
   ],
   "panasonic gh2": [
     "monochrome,1-208,duplex,fit,paper=letter"
@@ -218,7 +237,7 @@
   "Nikon CoolPix P900": [
     "monochrome,1-342,duplex,fit,paper=letter"
   ],
-  "yaesu ft-991 transceiver": [
+  "yaesu ft-991A transceiver": [
       "monochrome,1-10,duplex,fit,paper=letter",
       "color,11-14,duplex,fit,paper=letter",
       "monochrome,15-22,duplex,fit,paper=letter",
@@ -579,6 +598,9 @@
   ],
   "tandy Color Computer 3 Service": [
     "monochrome,1-129,duplex,fit,paper=letter"
+  ],
+  "panasonic lx7": [
+    "color,1-226,duplex,fit,paper=letter"
   ],
   "canon eos 6d": [
     "color,1-404,duplex,fit,paper=letter"

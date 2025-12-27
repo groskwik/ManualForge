@@ -1,94 +1,179 @@
 #!/usr/bin/env python
-import os
-import requests
+from pathlib import Path
 
-# ---------------------------------------------------------------------
-# CONFIG
-# ---------------------------------------------------------------------
-# Put your user token in an env var before running:
-#   set EBAY_USER_TOKEN=eyJhbGciOi...
-# v^1.1#i^1#f^0#r^1#p^3#I^3#t^Ul4xMF8zOkE0RDA1QTc4MTVBQ0Q1OEU0QTBFMjkzOEY2NDdFRjVGXzFfMSNFXjI2MA==
-EBAY_TOKEN = os.environ.get("EBAY_USER_TOKEN")
-if not EBAY_TOKEN:
-    raise SystemExit("ERROR: set EBAY_USER_TOKEN env var to your eBay user access token")
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
-# eBay production endpoint
-BASE_URL = "https://api.ebay.com/sell/fulfillment/v1/order"
 
-# we want orders that are not fully shipped
-FILTER = "orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}"
+URL = "https://www.ebay.com/sh/ord/?filter=status:AWAITING_SHIPMENT"
 
-def fetch_orders():
-    orders = []
-    limit = 50  # max 200, 50 is fine
-    offset = 0
+CHECKBOX_ID = "grid-table-bulk-checkbox"
 
-    headers = {
-        "Authorization": f"Bearer {EBAY_TOKEN}",
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
 
-    while True:
-        params = {
-            "filter": FILTER,
-            "limit": str(limit),
-            "offset": str(offset)
-        }
-        resp = requests.get(BASE_URL, headers=headers, params=params)
-        if resp.status_code != 200:
-            print("Request failed:", resp.status_code, resp.text)
-            break
+def js_click(driver, el):
+    driver.execute_script("arguments[0].click();", el)
 
-        data = resp.json()
-        batch = data.get("orders", [])
-        orders.extend(batch)
 
-        total = data.get("total", 0)
-        offset += limit
-        if offset >= total:
-            break
+def js_force_check(driver, el, checked=True):
+    # Force state and fire events (React-style UIs usually listen to these)
+    driver.execute_script(
+        """
+        const cb = arguments[0];
+        const val = arguments[1];
+        cb.checked = val;
+        cb.dispatchEvent(new Event('input', { bubbles: true }));
+        cb.dispatchEvent(new Event('change', { bubbles: true }));
+        """,
+        el, checked
+    )
 
-    return orders
+
+def select_all_orders_on_page(driver, timeout=30):
+    wait = WebDriverWait(driver, timeout)
+
+    cb = wait.until(EC.presence_of_element_located((By.ID, CHECKBOX_ID)))
+    wait.until(lambda d: d.find_element(By.ID, CHECKBOX_ID).is_enabled())
+    cb = driver.find_element(By.ID, CHECKBOX_ID)
+
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", cb)
+
+    if cb.is_selected():
+        return
+
+    # Prefer label click if present
+    labels = driver.find_elements(By.CSS_SELECTOR, f'label[for="{CHECKBOX_ID}"]')
+    if labels:
+        try:
+            ActionChains(driver).move_to_element(labels[0]).pause(0.1).click(labels[0]).perform()
+            if driver.find_element(By.ID, CHECKBOX_ID).is_selected():
+                return
+        except Exception:
+            pass
+
+    # Actions click on input
+    try:
+        cb = driver.find_element(By.ID, CHECKBOX_ID)
+        ActionChains(driver).move_to_element(cb).pause(0.1).click(cb).perform()
+        if driver.find_element(By.ID, CHECKBOX_ID).is_selected():
+            return
+    except Exception:
+        pass
+
+    # JS click
+    try:
+        cb = driver.find_element(By.ID, CHECKBOX_ID)
+        js_click(driver, cb)
+        if driver.find_element(By.ID, CHECKBOX_ID).is_selected():
+            return
+    except Exception:
+        pass
+
+    # Last resort: force-check + events
+    cb = driver.find_element(By.ID, CHECKBOX_ID)
+    js_force_check(driver, cb, True)
+
+
+def click_shipping_then_get_label(driver, timeout=30):
+    wait = WebDriverWait(driver, timeout)
+
+    # Click the Shipping menu button
+    shipping_btn = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//button[.//span[normalize-space()='Shipping'] or normalize-space()='Shipping']"
+    )))
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", shipping_btn)
+
+    try:
+        shipping_btn.click()
+    except Exception:
+        js_click(driver, shipping_btn)
+
+    # Wait until the menu is expanded (aria-expanded becomes true).
+    # If the element is re-rendered, reacquire it.
+    try:
+        wait.until(lambda d: shipping_btn.get_attribute("aria-expanded") == "true")
+    except TimeoutException:
+        shipping_btn = driver.find_element(
+            By.XPATH,
+            "//button[.//span[normalize-space()='Shipping'] or normalize-space()='Shipping']"
+        )
+
+    # Click the closest clickable ancestor of "Get shipping label"
+    item_clickable = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//span[contains(@class,'shui-menu-dropdown__primary-text') and normalize-space()='Get shipping label']"
+        "/ancestor::*[self::button or self::a][1]"
+    )))
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", item_clickable)
+
+    try:
+        item_clickable.click()
+    except Exception:
+        js_click(driver, item_clickable)
+
+
+def click_review_purchase(driver, timeout=30):
+    wait = WebDriverWait(driver, timeout)
+
+    btn = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//button[contains(@class,'review-and-pay') and normalize-space()='Review purchase']"
+    )))
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
+
+    try:
+        btn.click()
+    except Exception:
+        js_click(driver, btn)
+
+
+def ensure_logged_in_or_pause(driver):
+    cur = driver.current_url.lower()
+    if "signin" in cur or "login" in cur:
+        print("Redirected to sign-in. Please log in in the Chrome window, then press Enter here.")
+        input()
 
 
 def main():
-    orders = fetch_orders()
-    print(f"Found {len(orders)} unshipped / partially shipped orders")
-    print("-" * 60)
+    options = webdriver.ChromeOptions()
 
-    for o in orders:
-        order_id = o.get("orderId")
-        status = o.get("orderFulfillmentStatus")
-        buyer = o.get("buyer", {})
-        buyer_username = buyer.get("username")
+    # Dedicated profile folder so you remain logged in between runs
+    profile_dir = Path(__file__).with_name("chrome_profile_selenium")
+    profile_dir.mkdir(exist_ok=True)
+    options.add_argument(f"--user-data-dir={str(profile_dir)}")
 
-        # shipping address is under fulfillmentStartInstructions
-        ship_to = None
-        inst = o.get("fulfillmentStartInstructions", [])
-        if inst:
-            ship_to = inst[0].get("shippingStep", {}).get("shipTo")
+    driver = webdriver.Chrome(options=options)
 
-        print(f"Order ID: {order_id}")
-        print(f"Fulfillment status: {status}")
-        print(f"Buyer: {buyer_username}")
+    try:
+        # 1) Open shipment page
+        driver.get(URL)
+        print("Landed URL:", driver.current_url)
+        print("Title:", driver.title)
 
-        if ship_to:
-            name = ship_to.get("fullName")
-            addr1 = ship_to.get("addressLine1")
-            city = ship_to.get("city")
-            state = ship_to.get("stateOrProvince")
-            postal = ship_to.get("postalCode")
-            country = ship_to.get("countryCode")
-            print("Ship to:")
-            print(f"  {name}")
-            print(f"  {addr1}")
-            print(f"  {city}, {state} {postal}")
-            print(f"  {country}")
-        else:
-            print("Ship to: (not provided)")
+        # 2) If redirected, log in once, then reload the target page
+        ensure_logged_in_or_pause(driver)
+        driver.get(URL)
 
-        print("-" * 60)
+        # 3) Select all orders on this page (optional, but kept from the previous code)
+        select_all_orders_on_page(driver)
+        print("Select-all checkbox state:", driver.find_element(By.ID, CHECKBOX_ID).is_selected())
+
+        # 4) Open Shipping menu, click Get shipping label
+        click_shipping_then_get_label(driver)
+        print("Clicked Shipping -> Get shipping label")
+
+        # 5) Click Review purchase on the subsequent page/modal
+        click_review_purchase(driver)
+        print("Clicked Review purchase")
+
+        input("Done. Press Enter to quit...")
+
+    finally:
+        driver.quit()
 
 
 if __name__ == "__main__":

@@ -5,6 +5,11 @@ import threading
 import queue
 import sys
 import os
+import json
+import re
+import webbrowser
+from pathlib import Path
+from typing import List, Optional
 
 # try to import PyMuPDF for PDF preview
 try:
@@ -25,6 +30,12 @@ PDF_FOLDERS = [
     r"C:\Users\benoi\Downloads\ebay_manuals",
     r"C:\Users\benoi\Downloads\manuals",
 ]
+
+# ISO burning folder (same as isoburn.py default)
+ISO_FOLDER = r"C:\Users\benoi\Downloads\Lightscribe"
+
+# Listing DB (JSON) in current working directory
+LISTINGS_JSON = "ebay_links.json"
 
 # Default is now Tahoma (as requested). Toggle will switch to Consolas.
 DEFAULT_OUTPUT_FONT = ("Tahoma", 10)
@@ -58,6 +69,26 @@ def fuzzy_find_pdfs(partial: str):
             if f.lower().endswith(".pdf") and partial_lower in f.lower():
                 matches.append(os.path.join(folder, f))
     return matches
+
+# ----- ISO fuzzy find (same idea as isoburn.py: list + contains match) -----
+def list_iso_files(folder: str) -> List[Path]:
+    p = Path(folder)
+    if not p.is_dir():
+        return []
+    return sorted(
+        [f for f in p.iterdir() if f.is_file() and f.suffix.lower() == ".iso"],
+        key=lambda x: x.name.lower(),
+    )
+
+def find_iso_matches(iso_files: List[Path], partial_name: str) -> List[Path]:
+    q = partial_name.lower().strip()
+    if not q:
+        return []
+    return [f for f in iso_files if q in f.name.lower()]
+
+def fuzzy_find_isos(partial: str) -> List[Path]:
+    files = list_iso_files(ISO_FOLDER)
+    return find_iso_matches(files, partial)
 
 def get_pdf_page_count(pdf_path):
     if fitz is None or not pdf_path or not os.path.exists(pdf_path):
@@ -119,7 +150,6 @@ def compute_weight_from_pages(pages: int) -> str:
     else:
         return f"{pounds} lb {ounces} oz"
 
-
 def load_image_as_png_bytes(path, max_height=800):
     """Open jpg/png → resize → return PNG bytes safe for sg.Image."""
     if not os.path.exists(path):
@@ -150,17 +180,101 @@ def open_with_default_app(path):
     except Exception as e:
         output_queues[get_active_tab()].put(f"ERROR opening file: {e}\n")
 
+def open_url(url: str):
+    """Open URL in default browser."""
+    try:
+        webbrowser.open(url, new=2)  # new tab when possible
+    except Exception as e:
+        output_queues[get_active_tab()].put(f"ERROR opening URL: {e}\n")
+
+# ---------- Listing DB helpers ----------
+def load_listings_db(path: str) -> dict:
+    """
+    Load JSON mapping of manual_basename -> {url:..., itemId:...} (flexible)
+    Returns empty dict if not found or invalid.
+    """
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+ITEMID_RE = re.compile(r"(?:/itm/|item=|itemId=)(\d{9,15})", re.IGNORECASE)
+
+def extract_item_id_from_url(url: str) -> str | None:
+    if not url:
+        return None
+    m = ITEMID_RE.search(url)
+    return m.group(1) if m else None
+
+def get_listing_info_for_pdf(pdf_path: str, listings_db: dict) -> tuple[str | None, str | None]:
+    """
+    Returns (listing_url, item_id) for the given PDF, based on PDF basename.
+    Accepts entries like:
+      { "manualname": "https://..." }
+      { "manualname": {"url": "..."} }
+      { "manualname": {"itemId": "357..."} }
+    """
+    if not pdf_path:
+        return (None, None)
+    base = os.path.splitext(os.path.basename(pdf_path))[0]
+
+    entry = listings_db.get(base)
+    if entry is None:
+        return (None, None)
+
+    url = None
+    item_id = None
+
+    if isinstance(entry, str):
+        url = entry
+        item_id = extract_item_id_from_url(url)
+        return (url, item_id)
+
+    if isinstance(entry, dict):
+        if "url" in entry and isinstance(entry["url"], str):
+            url = entry["url"].strip() or None
+        if "itemId" in entry and isinstance(entry["itemId"], str):
+            item_id = entry["itemId"].strip() or None
+
+        if item_id is None and url is not None:
+            item_id = extract_item_id_from_url(url)
+
+        # If we only have item_id, we can still build a listing URL
+        if url is None and item_id is not None:
+            url = f"https://www.ebay.com/itm/{item_id}"
+
+        return (url, item_id)
+
+    return (None, None)
+
+def build_revise_url(item_id: str) -> str:
+    return f"https://www.ebay.com/sl/list?itemId={item_id}&mode=ReviseItem"
+
+def build_purchase_history_url(item_id: str) -> str:
+    return f"https://www.ebay.com/bin/purchaseHistory?item={item_id}"
+
+def build_sell_similar_url(item_id: str) -> str:
+    return f"https://www.ebay.com/sl/list?itemId={item_id}&mode=SellSimilarItem"
+
+ORDERS_URL = "https://www.ebay.com/sh/ord/?filter=status:ALL_ORDERS"
+ORDERS_AWAITING_URL = "https://www.ebay.com/sh/ord/?filter=status:AWAITING_SHIPMENT"
+
 # ---------- tools ----------
+# NOTE: batch_cover.py removed; replaced with isoburn.py
 TOOLS = [
     ("Print manual", "myprint.py"),
     ("2 Half-letter pdf", "2up.py"),
     ("Create eBay cover", "cover.py"),
-    ("Batch eBay covers", "batch_cover.py"),
+    ("Burn ISO file", "isoburn.py"),
     ("Print shipping labels", "label.py"),
     ("Lightscribe preview", "lightscribe.py"),
     ("PDF → PNG (all pages)", "pdf2png.py"),
     ("Inventory", "inventory.py"),
-    ("Lightscribe print", "lightscribe_print"),  # <-- new button
+    ("Lightscribe print", "lightscribe_print"),
 ]
 
 # ---------- theme / options ----------
@@ -176,9 +290,17 @@ col3 = TOOLS[2 * col_size:]
 cover_choices = list_cover_images()
 current_fuzzy_matches = []
 
+# ISO selection state
+current_iso_matches: List[Path] = []
+
 # preview state
 current_pdf_path = None
 current_pdf_pagecount = None
+
+# listing state
+listings_db = load_listings_db(os.path.join(os.getcwd(), LISTINGS_JSON))
+current_listing_url = None
+current_item_id = None
 
 # per-tab process state
 procs = {i: None for i in range(1, MAX_TABS + 1)}
@@ -191,6 +313,17 @@ active_tab_index = 1  # 1-based
 
 def get_active_tab():
     return active_tab_index
+
+def update_listing_buttons_state():
+    """Enable/disable listing buttons based on current_item_id/current_listing_url."""
+    has_listing = (current_listing_url is not None) and (current_item_id is not None)
+    try:
+        window["-OPEN_LISTING-"].update(disabled=not has_listing)
+        window["-REVISE_LISTING-"].update(disabled=not has_listing)
+        window["-PURCHASE_HISTORY-"].update(disabled=not has_listing)
+        window["-SELL_SIMILAR-"].update(disabled=not has_listing)
+    except Exception:
+        pass
 
 # ---------- options (left/mid/right) ----------
 col_left_options = [
@@ -245,6 +378,7 @@ col_mid_options = [
     ],
 ]
 
+# ISO UI is placed below Angle (as requested)
 col_right_options = [
     [sg.Text("Ratio:", tooltip="Scale the cover inside the base image (0.3 → 0.7)")],
     [sg.Slider(
@@ -262,6 +396,31 @@ col_right_options = [
         default=False,
         tooltip="Use angled cover layout when running cover.py",
     )],
+    [sg.HorizontalSeparator()],
+    [sg.Text("Search ISO:", tooltip=f"Type part of the ISO name in {ISO_FOLDER}")],
+    [sg.Input(
+        key="-ISO_SEARCHTXT-",
+        size=(30, 1),
+        enable_events=True,
+        tooltip="Type part of the ISO name here – used to auto-answer isoburn.py",
+    )],
+    [sg.Text("ISO matches:")],
+    [sg.Combo(
+        ["(no matches)"],
+        default_value="(no matches)",
+        key="-ISO_RESULT-",
+        size=(28, 1),
+        background_color="white",
+        text_color="black",
+        enable_events=True,
+        tooltip="Pick the ISO to auto-answer selection to isoburn.py",
+    )],
+    [sg.Text("Burner:")],
+    [
+        sg.Radio("isoburn", "BURNER", key="-BURN_ISOBURN-", default=True),
+        sg.Radio("CDBurnerXP", "BURNER", key="-BURN_CDBXP-", default=False),
+        sg.Radio("cdrecord", "BURNER", key="-BURN_CDRECORD-", default=False),
+    ],
 ]
 
 # ---------- tab builder ----------
@@ -271,7 +430,7 @@ def make_console_tab(i: int, visible: bool):
         [
             [sg.Multiline(
                 "",
-                size=(90, 25),
+                size=(90, 20),  # decreased height (was 25) to make room for ISO UI
                 key=f"-OUTPUT-{i}-",
                 autoscroll=True,
                 font=DEFAULT_OUTPUT_FONT,
@@ -293,7 +452,6 @@ def make_console_tab(i: int, visible: bool):
         expand_y=True,
     )
 
-# pre-create up to MAX_TABS tabs, only the first visible initially
 tabs = [make_console_tab(1, True)] + [make_console_tab(i, False) for i in range(2, MAX_TABS + 1)]
 
 # ---------- layout ----------
@@ -336,7 +494,25 @@ right_column = [
     [sg.Text("Preview:")],
     [sg.Image(key="-PREVIEW-", size=(400, 800))],
     [sg.Push(), sg.Button("← Prev", key="-PREV_PAGE-"), sg.Button("Next →", key="-NEXT_PAGE-"), sg.Push()],
-    [sg.Push(), sg.Button("Save image", key="-SAVE_IMAGE-"), sg.Push()],
+    [
+        sg.Push(),
+        sg.Button("Save image", key="-SAVE_IMAGE-"),
+        sg.Button("Open listing", key="-OPEN_LISTING-", disabled=True),
+        sg.Button("Revise listing", key="-REVISE_LISTING-", disabled=True),
+        sg.Push(),
+    ],
+    [
+        sg.Push(),
+        sg.Button("View purchase history", key="-PURCHASE_HISTORY-", disabled=True),
+        sg.Button("Sell similar item", key="-SELL_SIMILAR-", disabled=True),
+        sg.Push(),
+    ],
+    [
+        sg.Push(),
+        sg.Button("Orders", key="-ORDERS-"),
+        sg.Button("Orders awaiting shipment", key="-ORDERS_AWAITING-"),
+        sg.Push(),
+    ],
 ]
 
 layout = [
@@ -347,7 +523,6 @@ layout = [
     [
         sg.Text("Status:", size=(8, 1)),
         sg.Text("Idle", key="-STATUS-", expand_x=True),
-        #sg.Text("Pages: --", key="-PAGEINFO-", size=(15, 1), justification="right"),
         sg.Text("Pages: -- | Weight: --", key="-PAGEINFO-", size=(30, 1), justification="right"),
         sg.Button("Switch Font", key="-SWITCH_FONT-"),
         sg.Button("Exit"),
@@ -358,12 +533,16 @@ window = sg.Window(
     "ManualForge",
     layout,
     resizable=True,
+    location=(300, 0),  # <-- top-left of primary screen
     icon="logo.ico" if os.path.exists("logo.ico") else None,
     finalize=True,
 )
-# Bind Enter for each tab's send input
+
 for i in range(1, MAX_TABS + 1):
     window[f"-SEND-{i}-"].bind("<Return>", "_ENTER")
+
+# Ensure listing buttons correct at startup
+update_listing_buttons_state()
 
 # ---------- subprocess I/O ----------
 def stream_reader_char(stream, q):
@@ -399,10 +578,12 @@ def run_script(tab_idx, script_path, extra_args, auto_inputs=None):
         output_queues[tab_idx].put(f"ERROR: could not start {script_path}\n")
         window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
         return
+
     reader_thread(tab_idx, procs[tab_idx], output_queues[tab_idx])
     output_queues[tab_idx].put(f"Started (Tab {tab_idx}): {' '.join(cmd)}\n")
     window["-STATUS-"].update(f"Tab {tab_idx}: Running {os.path.basename(script_path)}")
     window[f"-SEND-{tab_idx}-"].set_focus()
+
     if auto_inputs:
         for item in auto_inputs:
             try:
@@ -412,10 +593,29 @@ def run_script(tab_idx, script_path, extra_args, auto_inputs=None):
                 output_queues[tab_idx].put(f"ERROR sending auto input: {e}\n")
 
 # ---------- preview helpers ----------
+def refresh_listing_for_pdf(pdf_path: str | None):
+    """Update current listing variables and enable/disable buttons."""
+    global current_listing_url, current_item_id
+
+    if not pdf_path or not os.path.exists(pdf_path):
+        current_listing_url = None
+        current_item_id = None
+        update_listing_buttons_state()
+        return
+
+    url, item_id = get_listing_info_for_pdf(pdf_path, listings_db)
+    current_listing_url = url
+    current_item_id = item_id
+    update_listing_buttons_state()
+
 def set_pdf_preview(pdf_path, page=1):
     """Set current_pdf_path, update page count, populate combobox, render page."""
     global current_pdf_path, current_pdf_pagecount
     current_pdf_path = pdf_path
+
+    # Listing buttons depend on current PDF selection
+    refresh_listing_for_pdf(pdf_path)
+
     if not pdf_path or not os.path.exists(pdf_path):
         current_pdf_pagecount = None
         window["-PAGEINFO-"].update("Pages: -- | Weight: --")
@@ -436,7 +636,7 @@ def set_pdf_preview(pdf_path, page=1):
         else:
             window["-PREVIEW-"].update(data=None)
     else:
-        window["-PAGEINFO-"].update("Pages: --")
+        window["-PAGEINFO-"].update("Pages: -- | Weight: --")
         window["-PREVIEWPAGE-"].update(values=["1"], value="1")
         window["-PREVIEW-"].update(data=None)
 
@@ -466,6 +666,35 @@ def select_tab(idx):
     except Exception:
         pass
 
+def get_selected_burner(values) -> str:
+    if values.get("-BURN_CDBXP-", False):
+        return "cdburnerxp"
+    if values.get("-BURN_CDRECORD-", False):
+        return "cdrecord"
+    return "isoburn"
+
+def get_selected_iso_path(values) -> str | None:
+    """
+    Returns full path to the currently selected ISO (from the ISO combobox),
+    or None if not selected / not found.
+    """
+    chosen = values.get("-ISO_RESULT-", "(no matches)")
+    if not chosen or chosen == "(no matches)":
+        return None
+
+    # current_iso_matches is your in-memory list of Path objects
+    for p in current_iso_matches:
+        if p.name == chosen:
+            return str(p.resolve())
+
+    # fallback: build from ISO_FOLDER if list is stale
+    candidate = os.path.join(ISO_FOLDER, chosen)
+    if os.path.exists(candidate):
+        return os.path.abspath(candidate)
+
+    return None
+
+
 # ---------- main loop ----------
 while True:
     event, values = window.read(timeout=100)
@@ -492,7 +721,6 @@ while True:
                 window[f"-TAB-{active_tabs_count}-"].update(visible=True)
                 select_tab(active_tabs_count)
                 active_tab_index = active_tabs_count
-                # focus the new tab's input for immediate typing
                 window[f"-SEND-{active_tabs_count}-"].set_focus()
             else:
                 output_queues[get_active_tab()].put("Max tabs reached (6).\n")
@@ -518,7 +746,7 @@ while True:
             window["-SEARCHRESULT-"].update(values=["(no matches)"], value="(no matches)")
             set_pdf_preview(None)
 
-    # user picks one of the matches
+    # user picks one of the PDF matches
     if event == "-SEARCHRESULT-":
         chosen = values["-SEARCHRESULT-"]
         if chosen != "(no matches)" and current_fuzzy_matches:
@@ -526,6 +754,29 @@ while True:
                 if os.path.basename(fullpath) == chosen:
                     set_pdf_preview(fullpath, page=1)
                     break
+
+    # live ISO search
+    if event == "-ISO_SEARCHTXT-":
+        t = values["-ISO_SEARCHTXT-"].strip()
+        if t:
+            iso_matches = fuzzy_find_isos(t)
+            current_iso_matches = iso_matches
+            if iso_matches:
+                window["-ISO_RESULT-"].update(
+                    values=[p.name for p in iso_matches],
+                    value=iso_matches[0].name,
+                )
+            else:
+                current_iso_matches = []
+                window["-ISO_RESULT-"].update(values=["(no matches)"], value="(no matches)")
+        else:
+            current_iso_matches = []
+            window["-ISO_RESULT-"].update(values=["(no matches)"], value="(no matches)")
+
+    # user picks one ISO match
+    if event == "-ISO_RESULT-":
+        # Nothing else to do; selection is used when running isoburn.py
+        pass
 
     # user changes preview page via combobox
     if event == "-PREVIEWPAGE-":
@@ -552,6 +803,38 @@ while True:
         else:
             output_queues[get_active_tab()].put("No PDF selected to open.\n")
 
+    # ----- Listing buttons (PDF-dependent) -----
+    if event == "-OPEN_LISTING-":
+        if current_listing_url:
+            open_url(current_listing_url)
+        else:
+            output_queues[get_active_tab()].put("No listing URL for current PDF (check ebay_links.json).\n")
+
+    if event == "-REVISE_LISTING-":
+        if current_item_id:
+            open_url(build_revise_url(current_item_id))
+        else:
+            output_queues[get_active_tab()].put("No itemId for current PDF (check ebay_links.json).\n")
+
+    if event == "-PURCHASE_HISTORY-":
+        if current_item_id:
+            open_url(build_purchase_history_url(current_item_id))
+        else:
+            output_queues[get_active_tab()].put("No itemId for current PDF (check ebay_links.json).\n")
+
+    if event == "-SELL_SIMILAR-":
+        if current_item_id:
+            open_url(build_sell_similar_url(current_item_id))
+        else:
+            output_queues[get_active_tab()].put("No itemId for current PDF (check ebay_links.json).\n")
+
+    # ----- Orders buttons (not PDF-dependent) -----
+    if event == "-ORDERS-":
+        open_url(ORDERS_URL)
+
+    if event == "-ORDERS_AWAITING-":
+        open_url(ORDERS_AWAITING_URL)
+
     # save current PDF preview page as JPG
     if event == "-SAVE_IMAGE-":
         tab_idx = get_active_tab()
@@ -566,29 +849,24 @@ while True:
             output_queues[tab_idx].put("Cannot save as JPG: Pillow (PIL) is not available.\n")
             window["-STATUS-"].update("Cannot save as JPG (no Pillow)")
         else:
-            # determine current page number from the combobox
             try:
                 page_num = int(values["-PREVIEWPAGE-"])
             except Exception:
                 page_num = 1
 
-            # get PNG bytes for that page
             png_bytes = render_pdf_page_to_bytes(current_pdf_path, page_index=page_num - 1)
             if not png_bytes:
                 output_queues[tab_idx].put("Failed to render current PDF page.\n")
                 window["-STATUS-"].update("Failed to render current PDF page")
             else:
-                # build output JPG filename: <pdf_name>_p<page>.jpg
                 base = os.path.splitext(os.path.basename(current_pdf_path))[0]
                 out_name = f"{base}_p{page_num}.jpg"
                 out_path = os.path.join(os.getcwd(), out_name)
 
                 try:
-                    # convert PNG bytes -> JPG file using Pillow
                     bio = BytesIO(png_bytes)
                     img = Image.open(bio).convert("RGB")
                     img.save(out_path, "JPEG")
-
                     msg = f"Saved preview as {out_name}\n"
                     output_queues[tab_idx].put(msg)
                     window["-STATUS-"].update(f"Saved preview as {out_name}")
@@ -600,10 +878,58 @@ while True:
     if isinstance(event, tuple) and event[0] == "RUN_TOOL":
         tab_idx = get_active_tab()
         script = event[1]
+
         # --- Force monospace font for inventory.py ---
         if script == "inventory.py":
             window[f"-OUTPUT-{tab_idx}-"].update(font=ALT_OUTPUT_FONT)
 
+        if script == "lightscribe_print":
+            tab_idx = get_active_tab()
+            exe_path = r"C:\Program Files (x86)\LightScribe Template Labeler\TemplateLabeler.exe"
+
+            iso_path = None
+            try:
+                iso_path = get_selected_iso_path(values)
+            except Exception:
+                iso_path = None
+
+            # If an ISO is selected, try to open the matching .lsl
+            if iso_path:
+                base = os.path.splitext(iso_path)[0]
+                lsl_path = base + ".lsl"
+
+                if os.path.exists(lsl_path):
+                    try:
+                        open_with_default_app(lsl_path)
+                        output_queues[tab_idx].put(f"Opened LightScribe project:\n  {lsl_path}\n")
+                        window["-STATUS-"].update("Opened .lsl for selected ISO")
+                    except Exception as e:
+                        output_queues[tab_idx].put(f"ERROR opening .lsl: {e}\n")
+                        window["-STATUS-"].update("ERROR opening .lsl")
+                    continue  # done
+                else:
+                    output_queues[tab_idx].put(
+                        f"WARNING: .lsl not found for selected ISO:\n  {lsl_path}\n"
+                        "Opening TemplateLabeler.exe instead.\n"
+                    )
+
+            # Default behavior: open TemplateLabeler.exe
+            if os.path.exists(exe_path):
+                try:
+                    subprocess.Popen([exe_path])
+                    output_queues[tab_idx].put(f"Started Lightscribe Template Labeler:\n  {exe_path}\n")
+                    window["-STATUS-"].update("Lightscribe Template Labeler started")
+                except Exception as e:
+                    output_queues[tab_idx].put(f"ERROR launching TemplateLabeler.exe: {e}\n")
+                    window["-STATUS-"].update("Tab ERROR launching TemplateLabeler.exe")
+            else:
+                output_queues[tab_idx].put(
+                    "ERROR: TemplateLabeler.exe not found at:\n"
+                    "  C:\\Program Files (x86)\\LightScribe Template Labeler\\TemplateLabeler.exe\n"
+                )
+                window["-STATUS-"].update("TemplateLabeler.exe not found")
+
+            continue  # skip normal python-script handling for this button
 
         # --- special case: Lightscribe print (external EXE) ---
         if script == "lightscribe_print":
@@ -617,10 +943,52 @@ while True:
                     output_queues[tab_idx].put(f"ERROR launching TemplateLabeler.exe: {e}\n")
                     window["-STATUS-"].update(f"Tab {tab_idx}: ERROR launching TemplateLabeler.exe")
             else:
-                output_queues[tab_idx].put("ERROR: TemplateLabeler.exe not found at:\n"
-                                           "  C:\\Program Files (x86)\\LightScribe Template Labeler\\TemplateLabeler.exe\n")
+                output_queues[tab_idx].put(
+                    "ERROR: TemplateLabeler.exe not found at:\n"
+                    "  C:\\Program Files (x86)\\LightScribe Template Labeler\\TemplateLabeler.exe\n"
+                )
                 window["-STATUS-"].update(f"Tab {tab_idx}: TemplateLabeler.exe not found")
-            continue  # skip normal python-script handling for this button
+            continue
+
+        # --- special case: isoburn.py (auto-answer ISO query + selection) ---
+        if script == "isoburn.py":
+            script_path = os.path.join(os.getcwd(), script)
+            if not os.path.exists(script_path):
+                output_queues[tab_idx].put(f"ERROR: {script_path} not found\n")
+                window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+                continue
+
+            extra_args = []
+            auto_inputs = []
+
+            # burner choice passed as argument
+            burner = get_selected_burner(values)
+            extra_args.append(f"--burner={burner}")
+            # keep default folder (isoburn.py already defaults), but pass it for clarity
+            extra_args.append(f"--folder={ISO_FOLDER}")
+
+            # auto-answer prompts: query then match number (if multiple)
+            iso_query = values.get("-ISO_SEARCHTXT-", "").strip()
+            if iso_query:
+                auto_inputs.append(iso_query)
+
+                # if multiple matches, auto-send the chosen index
+                if current_iso_matches:
+                    chosen_iso = values.get("-ISO_RESULT-", "(no matches)")
+                    if chosen_iso != "(no matches)":
+                        # compute 1-based index inside current_iso_matches
+                        idx_to_send = None
+                        for idx, p in enumerate(current_iso_matches, start=1):
+                            if p.name == chosen_iso:
+                                idx_to_send = idx
+                                break
+                        # if there is more than 1 match, sending the index is required;
+                        # if there is exactly 1 match, sending "1" is harmless.
+                        if idx_to_send is not None:
+                            auto_inputs.append(str(idx_to_send))
+
+            run_script(tab_idx, script_path, extra_args, auto_inputs=auto_inputs)
+            continue
 
         # --- normal Python tools below ---
         script_path = os.path.join(os.getcwd(), script)
@@ -635,20 +1003,19 @@ while True:
             scripts_that_need_pdf = {
                 "myprint.py",
                 "cover.py",
-                "batch_cover.py",
                 "pdf2png.py",
                 "2up.py",
             }
 
-            if script in ("cover.py", "batch_cover.py"):
+            if script == "cover.py":
                 ratio = f"{values['-RATIO-']:.2f}"
                 coverfile = values["-COVERFILE-"].strip()
                 extra_args.append(f"--ratio={ratio}")
                 if coverfile:
                     extra_args.append(f"--cover={coverfile}")
-                # If angle is checked and we're running cover.py, add --angle
-                if script == "cover.py" and values.get("-ANGLE-", False):
+                if values.get("-ANGLE-", False):
                     extra_args.append("--angle")
+
             if script == "lightscribe.py":
                 coverfile = values["-COVERFILE-"].strip()
                 if coverfile:
