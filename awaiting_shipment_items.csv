@@ -1,13 +1,8 @@
-order_number,order_full,item_id,title,item_url,qty_sold,qty_available,price,price_text
-,,357555979000,Kubota B2301 B2601 Operator's Manual,https://www.ebay.com/itm/357555979000,1,0,17.95,$17.95
-,,356104248726,Owners Manual for Canon SX540 HS Power Shot Camera,https://www.ebay.com/itm/356104248726,1,1,20.00,$20.00
-,,357344077725,Olympus E-M1 Mark II / EM1 II Digital Camera INSTRUCTION MANUAL,https://www.ebay.com/itm/357344077725,1,1,27.65,$27.65
-,,356104723277,Olympus E-M10 Digital Camera INSTRUCTION MANUAL,https://www.ebay.com/itm/356104723277,1,1,25.62,$25.62
-,,356087901403,Singer 7285Q Instruction Manual,https://www.ebay.com/itm/356087901403,1,1,16.50,$16.50
-,,357539408133,Tesla Model Y Owner's Manual 2020-2024,https://www.ebay.com/itm/357539408133,1,1,31.00,$31.00
-,,357675468516,Racing Kart IAME KA100 Installation Manual,https://www.ebay.com/itm/357675468516,1,1,20.00,$20.00
-,,356120998971,Leica SL3 Instruction Manual,https://www.ebay.com/itm/356120998971,1,1,44.41,$44.41
-,,356092257608,Baby Lock Solaris 3 Complete Manual Set: Sewing / Embroidery / Emboidery Design,https://www.ebay.com/itm/356092257608,1,1,57.20,$57.20
-,,356122966577,Yamaha DGX-230 YPG-235 Owner's Manual,https://www.ebay.com/itm/356122966577,1,1,23.22,$23.22
-,,356107524192,Blackmagic Design Pocket Cinema Camera Manual,https://www.ebay.com/itm/356107524192,1,1,28.47,$28.47
-,,356093514296,Owners Manual for Panasonic Lumix DMC-LX7 Camera,https://www.ebay.com/itm/356093514296,1,1,25.30,$25.30
+account,order_number,order_full,item_id,title,item_url,qty_sold,qty_available,price,price_text
+primary,,,357680337145,Icom IC-705 Advanced Instruction Manual 218 pages,https://www.ebay.com/itm/357680337145,,,29.00,$29.00
+primary,,,356150804253,Owners Manual for GoPro Hero 7 Black Camera,https://www.ebay.com/itm/356150804253,1,1,22.77,$22.77
+primary,,,357555720949,Minn Kota i-Pilot Link 2015 Manual,https://www.ebay.com/itm/357555720949,,,17.95,$17.95
+primary,,,356715777481,Tektronix 475 Oscilloscope Service Manual with Schematics,https://www.ebay.com/itm/356715777481,1,0,23.49,$23.49
+primary,,,356093659908,Instruction Manual for Canon EOS 5D Mark II,https://www.ebay.com/itm/356093659908,1,1,33.02,$33.02
+secondary,,,204963822408,HP 12C Platinum Owner’s Handbook and Problem-Solving Guide,https://www.ebay.com/itm/204963822408,1,0,40.00,$40.00
+secondary,,,204889448336,HP-12C Calculator Owner's Handbook and Problem-Solving Guide Manual,https://www.ebay.com/itm/204889448336,1,0,49.00,$49.00

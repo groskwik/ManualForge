@@ -1,13 +1,18 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 from __future__ import annotations
 
 import argparse
 import csv
+import os
 import re
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+import psutil
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -22,6 +27,15 @@ RE_ORDER_FULL = re.compile(r"^\d{2}-\d{5}-\d{5}$")   # e.g. 27-13984-70927
 RE_AVAILABLE = re.compile(r"\((\d+)\s+available\)", re.IGNORECASE)
 RE_PRICE = re.compile(r"\$?\s*([0-9]+(?:\.[0-9]{2})?)")
 
+# Accept manual/guide/handbook
+RE_MANUAL = re.compile(r"\b(manual|guide|handbook)\b", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class AccountSpec:
+    name: str
+    profile_dir: Path
+
 
 def ensure_logged_in_or_pause(driver):
     cur = (driver.current_url or "").lower()
@@ -31,7 +45,6 @@ def ensure_logged_in_or_pause(driver):
 
 
 def scroll_to_bottom(driver, steps=6, pause_s=0.5):
-    import time
     for _ in range(steps):
         driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
         time.sleep(pause_s)
@@ -107,7 +120,6 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
     wait = WebDriverWait(driver, timeout)
     wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-    # helps with lazy-rendered rows
     scroll_to_bottom(driver, steps=6, pause_s=0.5)
 
     item_links = driver.find_elements(By.XPATH, "//a[contains(@href,'/itm/')]")
@@ -136,12 +148,14 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
             # order number anchor
             order_full = ""
             try:
-                order_el = row.find_element(By.XPATH, ".//a[contains(@href,'/mesh/ord/details') and contains(normalize-space(.),'-')]")
+                order_el = row.find_element(
+                    By.XPATH,
+                    ".//a[contains(@href,'/mesh/ord/details') and contains(normalize-space(.),'-')]"
+                )
                 cand = (order_el.text or "").strip()
                 if RE_ORDER_FULL.match(cand):
                     order_full = cand
             except Exception:
-                # fallback: any anchor matching the pattern
                 try:
                     order_el = row.find_element(By.XPATH, ".//a[normalize-space(.)]")
                     cand = (order_el.text or "").strip()
@@ -161,11 +175,13 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
                 avail_text = (avail_span.text or "").strip()
                 qty_avail = parse_qty_available(avail_text)
 
-                # prefer immediate preceding sibling <strong>, else nearest preceding <strong>
                 try:
                     strong_el = avail_span.find_element(By.XPATH, "./preceding-sibling::strong[1]")
                 except Exception:
-                    strong_el = row.find_element(By.XPATH, ".//span[contains(@class,'available-quantity')]/preceding::strong[1]")
+                    strong_el = row.find_element(
+                        By.XPATH,
+                        ".//span[contains(@class,'available-quantity')]/preceding::strong[1]"
+                    )
 
                 s = (strong_el.text or "").strip()
                 qty_sold = int(s) if s.isdigit() else None
@@ -198,12 +214,6 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
 
 
 def filter_out_phantom_rows(rows):
-    """
-    Drop spurious /itm/ anchors that are not real order items.
-    Typical signature: title is empty AND order fields empty
-    (often also price/qty empty).
-    Keep rows even if order_* is blank, as long as title exists.
-    """
     out = []
     for r in rows:
         title = (r.get("title") or "").strip()
@@ -213,18 +223,23 @@ def filter_out_phantom_rows(rows):
         qty_sold = (r.get("qty_sold") or "").strip()
         qty_avail = (r.get("qty_available") or "").strip()
 
-        # Drop only if it looks like a phantom line:
-        # no title AND no order AND no other useful signals
         if (not title) and (not order_full) and (not order_number) and (not price_text) and (not qty_sold) and (not qty_avail):
             continue
-
-        # In practice, title empty is the main red flag.
-        # If title is empty AND no order, drop it.
         if (not title) and (not order_full) and (not order_number):
             continue
 
         out.append(r)
+    return out
 
+
+def filter_rows_by_manual(rows, enabled=True):
+    if not enabled:
+        return rows
+    out = []
+    for r in rows:
+        title = (r.get("title") or "").strip()
+        if RE_MANUAL.search(title):
+            out.append(r)
     return out
 
 
@@ -262,14 +277,105 @@ def print_table(rows, headers=None, max_widths=None):
         print(sep.join(fmt_cell(h, r.get(h, "")) for h in headers))
 
 
-def write_csv(rows, path: Path):
+def write_csv(rows, path: Path, headers: list[str] | None = None):
     if not rows:
         return
-    headers = list(rows[0].keys())
+    if headers is None:
+        headers = list(rows[0].keys())
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=headers)
         w.writeheader()
         w.writerows(rows)
+
+
+def kill_chrome_using_profile(profile_dir: Path, debug: bool = True, kill_driver: bool = False) -> None:
+    """
+    Kill Chrome processes that were launched with --user-data-dir pointing to profile_dir.
+
+    This is a pragmatic recovery mechanism when a previous Selenium run stalls and
+    leaves Chrome running forever.
+
+    kill_driver:
+        If True, also kill chromedriver processes (rarely necessary).
+    """
+    profile_dir_abs = str(profile_dir.resolve())
+    hit = 0
+
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            name = (proc.info.get("name") or "").lower()
+            cmdline_list = proc.info.get("cmdline") or []
+            if not cmdline_list:
+                continue
+
+            cmdline = " ".join(cmdline_list)
+
+            is_chrome = ("chrome" in name) or ("chrome.exe" in name)
+            is_driver = ("chromedriver" in name) or ("chromedriver.exe" in name)
+
+            if is_chrome:
+                if profile_dir_abs in cmdline:
+                    hit += 1
+                    if debug:
+                        print(f"[INFO] Killing stale Chrome PID={proc.pid} using profile: {profile_dir_abs}")
+                    proc.kill()
+
+            if kill_driver and is_driver:
+                # chromedriver won't typically include the profile in cmdline, so we only do this
+                # when explicitly requested.
+                hit += 1
+                if debug:
+                    print(f"[INFO] Killing chromedriver PID={proc.pid}")
+                proc.kill()
+
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    if debug:
+        if hit == 0:
+            print(f"[INFO] No stale Chrome found for profile: {profile_dir_abs}")
+    time.sleep(0.5)
+
+
+def build_driver(profile_dir: Path, headless: bool, chrome_binary: str | None = None):
+    options = webdriver.ChromeOptions()
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    options.add_argument(f"--user-data-dir={str(profile_dir)}")
+
+    if chrome_binary:
+        options.binary_location = chrome_binary
+
+    if headless:
+        options.add_argument("--headless=new")
+        options.add_argument("--window-size=1400,900")
+
+    return webdriver.Chrome(options=options)
+
+
+def scrape_account(account: AccountSpec, url: str, args) -> list[dict]:
+    # NEW: kill stale Chrome using this profile (unless disabled)
+    if not args.no_kill_profile:
+        kill_chrome_using_profile(account.profile_dir, debug=args.debug, kill_driver=args.kill_chromedriver)
+
+    driver = build_driver(account.profile_dir, headless=args.headless, chrome_binary=args.chrome_binary)
+    try:
+        if args.debug:
+            print(f"\n=== Account: {account.name} | Profile: {account.profile_dir} ===")
+
+        driver.get(url)
+        ensure_logged_in_or_pause(driver)
+        driver.get(url)
+
+        rows = scrape_orders(driver, timeout=args.timeout, max_items=args.max_items, debug=args.debug)
+        rows = filter_out_phantom_rows(rows)
+
+        for r in rows:
+            r["account"] = account.name
+
+        rows = filter_rows_by_manual(rows, enabled=not args.no_manual_filter)
+        return rows
+    finally:
+        driver.quit()
 
 
 def main():
@@ -279,58 +385,98 @@ def main():
     ap.add_argument("--headless", action="store_true",
                     help="Run without showing Chrome. Use only after you have a valid logged-in profile.")
     ap.add_argument("--stdout-short", action="store_true",
-                    help="Print only item_id,title,item_url to stdout (CSV remains full).")
+                    help="Print only account,item_id,title to stdout (CSV remains full).")
     ap.add_argument("--max-items", type=int, default=500)
     ap.add_argument("--timeout", type=int, default=30)
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--out-dir", default=".", help="Output folder for CSV.")
+
+    ap.add_argument("--account", choices=["primary", "secondary", "both"], default="both",
+                    help="Which eBay account(s) to scrape (profiles are separate). Default: both.")
+    ap.add_argument("--primary-profile", default=None,
+                    help="Folder for the primary Chrome user-data-dir (default: ./chrome_profile_selenium).")
+    ap.add_argument("--secondary-profile", default=None,
+                    help="Folder for the secondary Chrome user-data-dir (default: ./chrome_profile_selenium_2).")
+
+    ap.add_argument("--chrome-binary", default=None,
+                    help="Optional path to Chrome/Chromium binary.")
+
+    ap.add_argument("--no-manual-filter", action="store_true",
+                    help="Disable the default filter that keeps only items with 'manual|guide|handbook' in the title.")
+
+    # NEW: stale Chrome killer flags
+    ap.add_argument("--no-kill-profile", action="store_true",
+                    help="Do NOT kill stale Chrome processes using the same Selenium profile(s) before starting.")
+    ap.add_argument("--kill-chromedriver", action="store_true",
+                    help="Also kill chromedriver processes (use only if things are very stuck).")
+
     args = ap.parse_args()
 
     url = ALL_ORDERS_URL if args.all_orders else AWAITING_URL
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_name = "all_orders_items.csv" if args.all_orders else "awaiting_shipment_items.csv"
+    script_dir = Path(__file__).resolve().parent
+    primary_profile = Path(args.primary_profile).resolve() if args.primary_profile else (script_dir / "chrome_profile_selenium")
+    secondary_profile = Path(args.secondary_profile).resolve() if args.secondary_profile else (script_dir / "chrome_profile_selenium_2")
+
+    accounts = [
+        AccountSpec("primary", primary_profile),
+        AccountSpec("secondary", secondary_profile),
+    ]
+
+    if args.account == "primary":
+        accounts = [accounts[0]]
+    elif args.account == "secondary":
+        accounts = [accounts[1]]
+
+    combined_rows: list[dict] = []
+    for acc in accounts:
+        rows = scrape_account(acc, url, args)
+        combined_rows.extend(rows)
+
+    # Stable CSV headers
+    preferred = [
+        "account",
+        "order_number",
+        "order_full",
+        "item_id",
+        "title",
+        "item_url",
+        "qty_sold",
+        "qty_available",
+        "price",
+        "price_text",
+    ]
+    headers = preferred
+
+    page_tag = "all_orders" if args.all_orders else "awaiting_shipment"
+    manual_tag = "manuals" if not args.no_manual_filter else "all_items"
+    csv_name = (
+        #f"{page_tag}_{manual_tag}_both_accounts.csv"
+        f"{page_tag}_items.csv"
+        if args.account == "both"
+        #else f"{page_tag}_{manual_tag}_{args.account}.csv"
+        else f"{page_tag}_{args.account}.csv"
+    )
     out_csv = out_dir / csv_name
 
-    options = webdriver.ChromeOptions()
+    print()
+    if args.stdout_short:
+        short_headers = ["account", "item_id", "title"]
+        print_table(combined_rows, headers=short_headers, max_widths={"title": 90})
+    else:
+        print_table(combined_rows, headers=headers, max_widths={"title": 60, "item_url": 60, "price_text": 40})
 
-    profile_dir = Path(__file__).with_name("chrome_profile_selenium").resolve()
-    profile_dir.mkdir(parents=True, exist_ok=True)
-    options.add_argument(f"--user-data-dir={str(profile_dir)}")
+    if combined_rows:
+        write_csv(combined_rows, out_csv, headers=headers)
 
-    if args.headless:
-        options.add_argument("--headless=new")
-        options.add_argument("--window-size=1400,900")
-
-    driver = webdriver.Chrome(options=options)
-
-    try:
-        driver.get(url)
-        ensure_logged_in_or_pause(driver)
-        driver.get(url)
-
-        rows = scrape_orders(driver, timeout=args.timeout, max_items=args.max_items, debug=args.debug)
-
-        # NEW: filter out the spurious empty-order rows
-        rows = filter_out_phantom_rows(rows)
-
-        print()
-        if args.stdout_short:
-            #short_headers = ["item_id", "title", "item_url"]
-            short_headers = ["item_id", "title"]
-            print_table(rows, headers=short_headers, max_widths={"title": 80, "item_url": 80})
-        else:
-            print_table(rows, max_widths={"title": 60, "item_url": 60})
-
-        write_csv(rows, out_csv)
-        print(f"\nSaved CSV: {out_csv}")
-
-        if not args.headless:
-            input("\nDone. Press Enter to quit...")
-
-    finally:
-        driver.quit()
+    print(f"\nSaved CSV: {out_csv}")
+    print(f"Rows kept: {len(combined_rows)}")
+    if not args.no_manual_filter:
+        print("Filter applied: title contains 'manual' or 'guide' or 'handbook' (case-insensitive).")
+    else:
+        print("Filter disabled: keeping all titles.")
 
 
 if __name__ == "__main__":

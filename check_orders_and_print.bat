@@ -2,7 +2,7 @@
     
 python ebay_scrape.py --headless --stdout-short
 
-python restock.py --headless
+python restock.py 
 
 python ebay_linker.py ^
   --orders-csv awaiting_shipment_items.csv ^
@@ -11,8 +11,7 @@ python ebay_linker.py ^
   --recursive ^
   --min-score 60 ^
   --min-margin 8 ^
-  --print ^
-  --myprint C:\Users\benoi\Downloads\ManualForge\myprint.py
+  --print 
 
 rem  --always-ask-printer ^
 rem --printer 2 ^

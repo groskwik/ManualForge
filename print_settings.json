@@ -199,7 +199,7 @@
     "monochrome,3-137,duplex,fit,paper=letter",
     "color,138,simplex,fit,paper=letter"
   ],
-  "canon powershot sx40hs": [
+  "canon powershot sx40 hs": [
     "color,1,simplex,fit,paper=letter",
     "monochrome,2,simplex,fit,paper=letter",
     "monochrome,3-219,duplex,fit,paper=letter"
@@ -645,5 +645,31 @@
   ],
   "tesla cybertruck": [
     "color,1-322,duplex,fit,paper=letter"
+  ],
+  "sony fdr-ax100": [
+    "monochrome,1-56,duplex,fit,paper=letter"
+  ],
+  "sony dsc-h400": [
+    "monochrome,1-80,duplex,fit,paper=letter"
+  ],
+  "pentax kx": [
+    "monochrome,1-324,duplex,fit,paper=letter"
+  ],
+  "tandy 102": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-148,simplex,fit,paper=letter"
+  ],
+  "baby lock solaris 3 complete manual set sewing embroidery emboidery design": [
+    "color,1-603,duplex,fit,paper=letter"
+  ],
+  "nikon d500": [
+    "monochrome,1-428,duplex,fit,paper=letter"
+  ],
+  "atari 400 service manual": [
+    "monochrome,1-129,duplex,fit,paper=letter"
+  ],
+  "nikon d3s": [
+    "monochrome,1-460,duplex,fit,paper=letter"
   ]
 }

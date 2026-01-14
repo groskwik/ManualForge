@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#!/usr/bin/env python
 import PySimpleGUI as sg
 import subprocess
 import threading
@@ -50,14 +49,63 @@ MYPRINT_PATH = r"C:\Users\benoi\Downloads\ManualForge\myprint.py"
 AWAITING_CSV = "awaiting_shipment_items.csv"
 
 PRINT_SETTINGS_JSON = "print_settings.json"
-
+LINKED_EVENT = "-LINKED_PDF-"
 
 # Default is now Tahoma (as requested). Toggle will switch to Consolas.
 DEFAULT_OUTPUT_FONT = ("Tahoma", 10)
 ALT_OUTPUT_FONT = ("Consolas", 10)
 MAX_TABS = 6
 
+# per-tab incremental line buffer for stdout/stderr scanning
+line_buffers = {i: "" for i in range(1, MAX_TABS + 1)}
+
+SEQ_STATUS_EVENT = "-SEQ_STATUS-"
+sequence_threads = {i: None for i in range(1, MAX_TABS + 1)}
+
+RE_LINKED = re.compile(
+    r"\bLinked:\s*(.+?)(?:\s*->\s*.*)?$",
+    re.IGNORECASE
+)
+
+GUI_PREVIEW_EVENT = "-AUTO_PREVIEW_PDF-"
+
+# per-tab line buffer for parsing streamed console output
+line_buffers = {i: "" for i in range(1, MAX_TABS + 1)}
+
+
 # ---------- helpers ----------
+def resolve_pdf_from_linked_name(name: str) -> str | None:
+    """
+    Given a 'Linked: <name>' stdout token, try to find the best matching PDF.
+    Strategy:
+      1) Try exact basename match (case-insensitive) across PDF_FOLDERS
+      2) Fallback: fuzzy contains search using your existing fuzzy_find_pdfs
+    """
+    if not name:
+        return None
+
+    # common: ebay_linker prints the PDF basename (without .pdf)
+    wanted = name.strip()
+    wanted_lower = wanted.lower()
+
+    # 1) exact basename match
+    for folder in PDF_FOLDERS:
+        if not os.path.isdir(folder):
+            continue
+        for f in os.listdir(folder):
+            if not f.lower().endswith(".pdf"):
+                continue
+            base = os.path.splitext(f)[0].lower()
+            if base == wanted_lower:
+                return os.path.join(folder, f)
+
+    # 2) fallback: contains match (your existing engine)
+    matches = fuzzy_find_pdfs(wanted)
+    if matches:
+        return matches[0]
+
+    return None
+
 def get_print_settings_summary(pdf_path: str | None, db: dict) -> str:
     """
     Return a one-line summary of print settings for this PDF.
@@ -581,6 +629,8 @@ right_column = [
     ],
     [
         sg.Push(),
+        sg.Button("Update links", key="-UPDATE_LINKS-"),
+        sg.Button("Print360", key="-PRINT360-"),
         sg.Button("Check orders and print", key="-CHECK_AND_PRINT-"),
         sg.Checkbox("Always ask printer", key="-ALWAYS_ASK_PRINTER-", default=False),
         sg.Push(),
@@ -621,17 +671,38 @@ for i in range(1, MAX_TABS + 1):
     window[f"-SEND-{i}-"].bind("<Return>", "_ENTER")
 
 # ---------- subprocess I/O ----------
-def stream_reader_char(stream, q):
+def stream_reader_char(tab_idx: int, stream, q):
     while True:
         ch = stream.read(1)
         if not ch:
             break
+
+        # always push raw output to the console queue
         q.put(ch)
-    stream.close()
+
+        # accumulate line buffer for pattern detection
+        buf = line_buffers.get(tab_idx, "") + ch
+        line_buffers[tab_idx] = buf
+
+        if ch == "\n":
+            line = buf.strip("\r\n")
+            line_buffers[tab_idx] = ""  # reset for next line
+
+            m = RE_LINKED.search(line)
+            if m:
+                linked_name = m.group(1).strip()
+                window.write_event_value(GUI_PREVIEW_EVENT, (tab_idx, linked_name))
+
+
+    try:
+        stream.close()
+    except Exception:
+        pass
+
 
 def reader_thread(tab_idx, proc, q):
-    threading.Thread(target=stream_reader_char, args=(proc.stdout, q), daemon=True).start()
-    threading.Thread(target=stream_reader_char, args=(proc.stderr, q), daemon=True).start()
+    threading.Thread(target=stream_reader_char, args=(tab_idx, proc.stdout, q), daemon=True).start()
+    threading.Thread(target=stream_reader_char, args=(tab_idx, proc.stderr, q), daemon=True).start()
 
 def _start_process(tab_idx: int, cmd: List[str], status_label: str):
     """Start a process and stream output to the tab console."""
@@ -686,38 +757,76 @@ def run_python_cmd(tab_idx: int, args: List[str], label: str):
     _start_process(tab_idx, cmd, label)
 
 def run_sequence_in_thread(tab_idx: int, commands: List[List[str]], labels: List[str]):
-    """Run a sequence of commands (each is a full cmd list) in a background thread, streaming output."""
+    """
+    Run a sequence of commands (each is a full cmd list) in a background thread, streaming output.
+
+    Fixes:
+      - Clears stop flag at start so a previous cancellation doesn't cancel the next run.
+      - Clears stop flag when done (cancelled or completed).
+      - Avoids starting a second sequence on the same tab if one is already running.
+      - Uses window.write_event_value to update GUI safely from thread.
+    """
+    # Don't allow two sequences to overlap in the same tab
+    t = sequence_threads.get(tab_idx)
+    if t is not None and t.is_alive():
+        output_queues[tab_idx].put("[Sequence already running in this tab]\n")
+        return
+
+    # CRITICAL FIX: reset cancellation state for the new run
+    stop_flags[tab_idx].clear()
+
     def worker():
-        for cmd, label in zip(commands, labels):
-            if stop_flags[tab_idx].is_set():
-                output_queues[tab_idx].put("\n[Sequence cancelled]\n")
-                break
+        cancelled = False
+        try:
+            window.write_event_value(SEQ_STATUS_EVENT, (tab_idx, f"Tab {tab_idx}: Running sequence"))
 
-            output_queues[tab_idx].put("\n" + "=" * 70 + "\n")
-            output_queues[tab_idx].put(f"{label}\n")
-            output_queues[tab_idx].put("=" * 70 + "\n")
-
-            _start_process(tab_idx, cmd, label)
-            p = procs[tab_idx]
-            if not p:
-                break
-
-            # wait until finishes or cancelled
-            while p.poll() is None:
+            for cmd, label in zip(commands, labels):
+                # If user cancelled before we even start this command
                 if stop_flags[tab_idx].is_set():
-                    try:
-                        p.terminate()
-                    except Exception:
-                        pass
+                    cancelled = True
+                    output_queues[tab_idx].put("\n[Sequence cancelled]\n")
                     break
-                threading.Event().wait(0.1)
 
-            # ensure process slot cleared by main loop (we also clear here to avoid next cmd racing)
-            procs[tab_idx] = None
+                output_queues[tab_idx].put("\n" + "=" * 70 + "\n")
+                output_queues[tab_idx].put(f"{label}\n")
+                output_queues[tab_idx].put("=" * 70 + "\n")
 
-        window["-STATUS-"].update(f"Tab {tab_idx}: Idle")
+                _start_process(tab_idx, cmd, label)
+                p = procs.get(tab_idx)
+                if not p:
+                    # _start_process failed or was refused
+                    break
 
-    threading.Thread(target=worker, daemon=True).start()
+                # Wait until finished or cancelled
+                while p.poll() is None:
+                    if stop_flags[tab_idx].is_set():
+                        cancelled = True
+                        try:
+                            p.terminate()
+                        except Exception:
+                            pass
+                        break
+                    threading.Event().wait(0.1)
+
+                # Ensure process slot cleared so next cmd doesn't race the main loop
+                procs[tab_idx] = None
+
+                if cancelled:
+                    output_queues[tab_idx].put("\n[Sequence cancelled]\n")
+                    break
+
+        finally:
+            # CRITICAL FIX: make sure next sequence is not instantly cancelled
+            stop_flags[tab_idx].clear()
+
+            # Clear "running thread" slot
+            sequence_threads[tab_idx] = None
+
+            # Status update (thread-safe)
+            window.write_event_value(SEQ_STATUS_EVENT, (tab_idx, f"Tab {tab_idx}: Idle"))
+
+    sequence_threads[tab_idx] = threading.Thread(target=worker, daemon=True)
+    sequence_threads[tab_idx].start()
 
 # ---------- preview + listing helpers ----------
 def refresh_listing_for_pdf(pdf_path: str | None):
@@ -877,6 +986,46 @@ while True:
             else:
                 output_queues[get_active_tab()].put("Max tabs reached (6).\n")
 
+    if event == SEQ_STATUS_EVENT:
+        tab_idx, text = values[SEQ_STATUS_EVENT]
+        window["-STATUS-"].update(text)
+
+    if event == LINKED_EVENT:
+        tab_idx, manual_name = values[LINKED_EVENT]
+
+        pdf_path = resolve_pdf_from_linked_name(manual_name)
+        if pdf_path and os.path.exists(pdf_path):
+            # Update preview to the PDF currently being printed
+            set_pdf_preview(pdf_path, page=1)
+
+            # Optional: sync the PDF search UI (nice UX)
+            window["-SEARCHTXT-"].update(manual_name)
+            # You can also update the matches combo if you want, but not required.
+        else:
+            # Don’t spam console; maybe just status
+            window["-STATUS-"].update(f"Linked: {manual_name} (PDF not found in folders)")
+
+    if event == GUI_PREVIEW_EVENT:
+        tab_idx, linked_name = values[GUI_PREVIEW_EVENT]
+
+        pdf_path = resolve_pdf_from_linked_name(linked_name)
+        if pdf_path and os.path.exists(pdf_path):
+            # update the preview pane
+            set_pdf_preview(pdf_path, page=1)
+
+            # also keep your PDF combobox in sync (optional but recommended)
+            window["-SEARCHTXT-"].update(linked_name)
+            # trigger the same behavior as typing (optional):
+            # window.write_event_value("-SEARCHTXT-", linked_name)
+
+            # status update (optional)
+            window["-STATUS-"].update(f"Printing: {os.path.basename(pdf_path)}")
+        else:
+            # don’t spam status too hard; but useful the first time
+            output_queues[get_active_tab()].put(
+                f"\n[WARN] Could not resolve PDF for Linked: {linked_name}\n"
+            )
+
     # live PDF search
     if event == "-SEARCHTXT-":
         text = values["-SEARCHTXT-"].strip()
@@ -927,9 +1076,9 @@ while True:
                                 if os.path.basename(fullpath) == chosen_basename:
                                     auto_inputs.append(str(idx))
                                     break
-                        else:
-                            # one match → select 1 (safe)
-                            auto_inputs.append("1")
+                        #else:
+                        #    # one match → select 1 (safe)
+                        #    auto_inputs.append("1")
 
             run_script(tab_idx, script_path, extra_args=extra_args, auto_inputs=auto_inputs)
             
@@ -1046,10 +1195,52 @@ while True:
         else:
             run_python_cmd(tab_idx, [SCRAPE_SCRIPT, "--headless", "--stdout-short"], "Listing awaiting shipment")
 
-    # NEW: Check orders and print -> run scrape, then linker with printer selection / always ask
+    if event == "-PRINT360-":
+        tab_idx = get_active_tab()
+        force_console_monospace(tab_idx)
+
+        linker_path = os.path.join(os.getcwd(), LINKER_SCRIPT)
+        if not os.path.exists(linker_path):
+            output_queues[tab_idx].put(f"ERROR: {linker_path} not found\n")
+            window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+        else:
+            prn = str(get_selected_printer_number(values))
+            cmd = [
+                sys.executable, "-u", LINKER_SCRIPT,
+                "--orders-csv", AWAITING_CSV,
+                "--links-json", LISTINGS_JSON,
+                "--out-links-json", LISTINGS_JSON,
+                "--print360",
+                "--printer", prn,
+            ]
+            _start_process(tab_idx, cmd, "ebay_linker.py (print360)")
+
+    if event == "-UPDATE_LINKS-":
+        tab_idx = get_active_tab()
+        force_console_monospace(tab_idx)
+
+        linker_path = os.path.join(os.getcwd(), LINKER_SCRIPT)
+        if not os.path.exists(linker_path):
+            output_queues[tab_idx].put(f"ERROR: {linker_path} not found\n")
+            window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+        else:
+            cmd = [
+                sys.executable, "-u", LINKER_SCRIPT,
+                "--orders-csv", AWAITING_CSV,
+                "--links-json", LISTINGS_JSON,
+                "--out-links-json", LISTINGS_JSON,
+                "--recursive",
+                "--min-score", "60",
+                "--min-margin", "8",
+            ]
+            _start_process(tab_idx, cmd, "ebay_linker.py (update links)")
+
     if event == "-CHECK_AND_PRINT-":
         tab_idx = get_active_tab()
         force_console_monospace(tab_idx)
+
+        # Optional but recommended: clear any previous cancellation *right here*
+        stop_flags[tab_idx].clear()
 
         scrape_path = os.path.join(os.getcwd(), SCRAPE_SCRIPT)
         linker_path = os.path.join(os.getcwd(), LINKER_SCRIPT)
@@ -1061,10 +1252,8 @@ while True:
             output_queues[tab_idx].put(f"ERROR: {linker_path} not found\n")
             window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
         else:
-            # command 1
             cmd1 = [sys.executable, "-u", SCRAPE_SCRIPT, "--headless", "--stdout-short"]
 
-            # command 2
             cmd2 = [
                 sys.executable, "-u", LINKER_SCRIPT,
                 "--orders-csv", AWAITING_CSV,
@@ -1301,12 +1490,26 @@ while True:
         for i in range(1, MAX_TABS + 1):
             window[f"-OUTPUT-{i}-"].update(font=new_font)
 
-    # flush output from all tabs
+    # flush output from all tabs + parse "Linked:" lines
     for i in range(1, MAX_TABS + 1):
         try:
             while True:
                 chunk = output_queues[i].get_nowait()
+
+                # still append to console
                 window[f"-OUTPUT-{i}-"].update(chunk, append=True)
+
+                # accumulate into a line buffer for parsing
+                line_buffers[i] += chunk
+                while "\n" in line_buffers[i]:
+                    line, remainder = line_buffers[i].split("\n", 1)
+                    line_buffers[i] = remainder
+
+                    m = RE_LINKED.match(line)
+                    if m:
+                        linked_name = m.group(1).strip()
+                        # send an event to the GUI thread with tab + name
+                        window.write_event_value(GUI_PREVIEW_EVENT, (i, linked_name))
         except queue.Empty:
             pass
 
