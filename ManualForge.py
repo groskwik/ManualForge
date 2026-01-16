@@ -631,6 +631,7 @@ right_column = [
         sg.Push(),
         sg.Button("Update links", key="-UPDATE_LINKS-"),
         sg.Button("Print360", key="-PRINT360-"),
+        sg.Button("Print720", key="-PRINT720-"),
         sg.Button("Check orders and print", key="-CHECK_AND_PRINT-"),
         sg.Checkbox("Always ask printer", key="-ALWAYS_ASK_PRINTER-", default=False),
         sg.Push(),
@@ -1194,6 +1195,34 @@ while True:
             window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
         else:
             run_python_cmd(tab_idx, [SCRAPE_SCRIPT, "--headless", "--stdout-short"], "Listing awaiting shipment")
+
+    if event == "-PRINT720-":
+        tab_idx = get_active_tab()
+        force_console_monospace(tab_idx)
+
+        linker_path = os.path.join(os.getcwd(), LINKER_SCRIPT)
+        if not os.path.exists(linker_path):
+            output_queues[tab_idx].put(f"ERROR: {linker_path} not found\n")
+            window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
+        else:
+            # Printer selection from GUI
+            prn1 = str(get_selected_printer_number(values))
+
+            # Second printer = the other one
+            # (keeps logic explicit and robust)
+            prn2 = "2" if prn1 == "1" else "1"
+
+            cmd = [
+                sys.executable, "-u", LINKER_SCRIPT,
+                "--orders-csv", AWAITING_CSV,
+                "--links-json", LISTINGS_JSON,
+                "--out-links-json", LISTINGS_JSON,
+                "--print720",
+                "--printer", prn1,
+                "--printer2", prn2,
+            ]
+
+            _start_process(tab_idx, cmd, "ebay_linker.py (print720)")
 
     if event == "-PRINT360-":
         tab_idx = get_active_tab()

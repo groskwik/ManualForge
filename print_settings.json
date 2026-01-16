@@ -621,7 +621,7 @@
     "color,1-116,duplex,fit,paper=letter"
   ],
   "dm41x_user_manual": [
-    "color,3-44,duplex,fit,paper=letter"
+    "color,1-44,duplex,fit,paper=letter"
   ],
   "tandy 100 hidden power": [
     "monochrome,2,simplex,fit,paper=letter",
@@ -671,5 +671,11 @@
   ],
   "nikon d3s": [
     "monochrome,1-460,duplex,fit,paper=letter"
+  ],
+  "leica m11p": [
+    "color,1-185,duplexshort,fit,paper=letter,landscape"
+  ],
+  "leica m11": [
+    "color,1-177,duplexshort,fit,paper=letter,landscape"
   ]
 }

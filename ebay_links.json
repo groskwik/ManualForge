@@ -242,10 +242,84 @@
   },
   "hp12cplatinum-oh-en.pdf": {
     "url": "https://www.ebay.com/itm/204963822408",
-    "item_id": "204963822408"
+    "item_id": "204963822408",
+    "typewriter": "True"
   },
   "hp12c-oh-en": {
     "url": "https://www.ebay.com/itm/204889448336",
-    "item_id": "204889448336"
+    "item_id": "204889448336",
+    "typewriter": "True"
+  },
+  "GoPro Hero 7 Black": {
+    "url": "https://www.ebay.com/itm/356150804253",
+    "item_id": "356150804253"
+  },
+  "Yamaha DGX-230": {
+    "url": "https://www.ebay.com/itm/356122966577",
+    "item_id": "356122966577"
+  },
+  "Tascam Model 24": {
+    "url": "https://www.ebay.com/itm/356885969408",
+    "item_id": "356885969408"
+  },
+  "Olympus E-M10 Mark III": {
+    "url": "https://www.ebay.com/itm/357285357381",
+    "item_id": "357285357381"
+  },
+  "dm42": {
+    "url": "https://www.ebay.com/itm/204616721925",
+    "item_id": "204616721925"
+  },
+  "dm41x_user_manual": {
+    "url": "https://www.ebay.com/itm/204616721235",
+    "item_id": "204616721235"
+  },
+  "hp12cplatinum-sh-en": {
+    "url": "https://www.ebay.com/itm/204896414552",
+    "item_id": "204896414552",
+    "typewriter": "True"
+  },
+  "HP41CL": {
+    "url": "https://www.ebay.com/itm/204989904297",
+    "item_id": "204989904297"
+  },
+  "HP41CL - Functions": {
+    "url": "https://www.ebay.com/itm/204989969198",
+    "item_id": "204989969198"
+  },
+  "HP41CL - The Easy Way v1.0": {
+    "url": "https://www.ebay.com/itm/204989973408",
+    "item_id": "204989973408"
+  },
+  "hp12c-sh-en_original": {
+    "url": "https://www.ebay.com/itm/204889476788",
+    "item_id": "204889476788",
+    "typewriter": "True"
+  },
+  "LEICA M EV1": {
+    "url": "https://www.ebay.com/itm/357955900737",
+    "item_id": "357955900737"
+  },
+  "Leica M11P": {
+    "url": "https://www.ebay.com/itm/357555429153",
+    "item_id": "357555429153"
+  },
+  "Canon EOS 3000D": {
+    "url": "https://www.ebay.com/itm/356093958122",
+    "item_id": "356093958122"
+  },
+  "Sony DSC RX10M4": {
+    "url": "https://www.ebay.com/itm/357555983208",
+    "item_id": "357555983208"
+  },
+  "hp82104a-sm-en": {
+    "url": "https://www.ebay.com/itm/205397602333",
+    "item_id": "205397602333",
+    "typewriter": "True"
+  },
+  "hpprime-ug-en": {
+    "url": "https://www.ebay.com/itm/204596351504",
+    "item_id": "204596351504",
+    "typewriter": "True"
   }
 }
