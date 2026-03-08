@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import sys, io
 import re
 import time
 from dataclasses import dataclass
@@ -30,6 +31,12 @@ RE_PRICE = re.compile(r"\$?\s*([0-9]+(?:\.[0-9]{2})?)")
 # Accept manual/guide/handbook
 RE_MANUAL = re.compile(r"\b(manual|guide|handbook)\b", re.IGNORECASE)
 
+
+try:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+except Exception:
+    pass
 
 @dataclass(frozen=True)
 class AccountSpec:

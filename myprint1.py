@@ -1,16 +1,11 @@
 #!/usr/bin/env python
 import os
-import re
 import subprocess
 import time
 from PyPDF2 import PdfReader
 import psutil
 import json
 from pathlib import Path
-import csv
-import sys
-import threading
-import queue
 
 # Path to SumatraPDF executable
 SUMATRA_PATH = r"C:\portableapps\sumatrapdf\sumatrapdf.exe"
@@ -20,9 +15,6 @@ PDF_FOLDERS = [
     r"C:\Users\benoi\Downloads\ebay_manuals",
     r"C:\Users\benoi\Downloads\manuals"
 ]
-
-# Hard-coded CSV path (as requested)
-MANUALS_CSV_PATH = r"C:\Users\benoi\Downloads\ManualForge\manuals.csv"
 
 # Available printers
 PRINTERS = {
@@ -174,9 +166,10 @@ def print_one_setting(pdf_path, setting, printer_name, batch_size=70, small_rang
     Print according to one setting entry, using your SumatraPDF command format.
     Handles both single pages and ranges with batching.
 
-    - If the total page span in THIS setting is < small_range_no_wait_threshold (default 10),
-      do NOT wait between batches (or after it).
-    - Larger ranges keep the normal delay between batches.
+    Change requested:
+      - If the total page span in THIS setting is < small_range_no_wait_threshold (default 10),
+        do NOT wait between batches (or after it).
+      - Larger ranges keep the normal delay between batches.
     """
     delay_between_batches = compute_delay_between_batches(printer_name)
 
@@ -236,140 +229,11 @@ def print_one_setting(pdf_path, setting, printer_name, batch_size=70, small_rang
     time.sleep(10)
 
 
-# -------------------- NEW: manuals.csv lookup + timed prompt --------------------
-
-def load_manuals_index(csv_path: str):
-    """
-    Build a lookup by normalized title and by normalized PDF stem.
-    Returns:
-      - rows: list of dict rows
-      - by_title: dict[norm_title] -> list[row]
-    """
-    if not os.path.isfile(csv_path):
-        print(f"[WARN] manuals.csv not found at: {csv_path} (skipping existence check)")
-        return [], {}
-
-    rows = []
-    by_title = {}
-    try:
-        with open(csv_path, "r", newline="", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                rows.append(r)
-                t = (r.get("title") or "").strip()
-                nt = normalize_for_db(t)
-                if nt:
-                    by_title.setdefault(nt, []).append(r)
-    except Exception as e:
-        print(f"[WARN] Failed to read manuals.csv ({csv_path}): {e}")
-        return [], {}
-
-    return rows, by_title
-
-
-def normalize_for_db(s: str) -> str:
-    """
-    Aggressive normalization for matching:
-    - lowercase
-    - keep alnum tokens
-    - join with single space
-    """
-    s = (s or "").lower()
-    tokens = re.findall(r"[a-z0-9]+", s)
-    return " ".join(tokens)
-
-
-def interpret_manuals_row(r: dict) -> str:
-    """
-    Interpret one manuals.csv row with your rules:
-    - box column reports BOX 1/2/3/BOXL etc.
-    - cover column == '1' => cover printed only
-    """
-    box = (r.get("box") or "").strip()
-    cover = (r.get("cover") or "").strip()
-
-    parts = []
-    if box:
-        parts.append(f"in {box}")
-    if cover == "1":
-        parts.append("cover-only (cover=1)")
-    elif cover == "0":
-        parts.append("not cover-only (cover=0)")
-    elif cover:
-        parts.append(f"cover={cover}")
-
-    if not parts:
-        return "present (no box/cover info)"
-    return ", ".join(parts)
-
-
-def timed_input(prompt: str, timeout_s: int = 30) -> str | None:
-    """
-    Wait up to timeout_s seconds for user input.
-    Returns:
-      - string (possibly empty) if user typed something and pressed Enter
-      - None if timeout expires with no input (batch mode)
-    Works on Windows and Linux (uses a background thread).
-    """
-    q: "queue.Queue[str]" = queue.Queue()
-
-    def worker():
-        try:
-            s = input(prompt)
-        except EOFError:
-            s = ""
-        q.put(s)
-
-    t = threading.Thread(target=worker, daemon=True)
-    t.start()
-
-    try:
-        return q.get(timeout=timeout_s)
-    except queue.Empty:
-        return None
-
-
-def check_already_in_manuals_csv(pdf_path: str, manuals_by_title: dict):
-    """
-    Check if selected PDF is already referenced in manuals.csv.
-    We match on:
-      - PDF stem
-      - PDF stem without aggressive punctuation differences (normalize_for_db)
-    """
-    stem = Path(pdf_path).stem
-    nstem = normalize_for_db(stem)
-
-    hits = manuals_by_title.get(nstem, [])
-    return stem, hits
-
-
-# -------------------- printing flow --------------------
-
 def print_pdf(printer_name, partial_name):
     """Prints a PDF with predefined settings or user-defined page ranges."""
     pdf_path = find_pdf(partial_name)
     if not pdf_path:
         return
-
-    # NEW: check manuals.csv BEFORE printing (after user chose a specific PDF)
-    _, manuals_by_title = load_manuals_index(MANUALS_CSV_PATH)
-    stem, hits = check_already_in_manuals_csv(pdf_path, manuals_by_title)
-
-    if hits:
-        print("\n[INFO] This PDF seems to already exist in manuals.csv:")
-        for idx, r in enumerate(hits, start=1):
-            t = (r.get("title") or "").strip()
-            print(f"  {idx}) title='{t}' -> {interpret_manuals_row(r)}")
-
-        resp = timed_input("\nPress Enter to continue printing, or type 's' to skip this print (30s timeout): ", 30)
-        if resp is None:
-            print("\n[INFO] No response after 30 seconds -> continuing (batch mode).")
-        else:
-            resp = resp.strip().lower()
-            if resp == "s":
-                print("[INFO] Skipping print as requested.")
-                return
-            # any other response (including empty) continues
 
     page_count = get_pdf_page_count(pdf_path)
     if page_count:
@@ -438,7 +302,7 @@ def print_pdf(printer_name, partial_name):
 
     batch_size = 70
     for setting in effective_settings:
-        # removes wait only when THIS setting range < 10 pages
+        # NEW behavior: removes wait only when THIS setting range < 10 pages
         print_one_setting(
             pdf_path,
             setting,

@@ -390,7 +390,7 @@
     "color,1-93,duplex,fit,paper=letter"
   ],
   "nikon d3100 reference": [
-    "monochrome,1-214,duplex,fit,paper=letter"
+    "monochrome,1-224,duplex,fit,paper=letter"
   ],
   "jvc gy-hm200u": [
     "monochrome,1-184,duplex,fit,paper=letter"
@@ -628,9 +628,7 @@
     "monochrome,3-257,duplex,fit,paper=letter"
   ],
   "canon powershot sx30 is": [
-    "color,1,simplex,fit,paper=letter",
-    "monochrome,2,simplex,fit,paper=letter",
-    "monochrome,3-196,duplex,fit,paper=letter"
+    "monochrome,1-196,duplex,fit,paper=letter"
   ],
   "tandy 100 reference": [
     "color,1,simplex,fit,paper=letter",
@@ -658,7 +656,7 @@
   "tandy 102": [
     "color,1,simplex,fit,paper=letter",
     "monochrome,2,simplex,fit,paper=letter",
-    "monochrome,3-148,simplex,fit,paper=letter"
+    "monochrome,3-148,duplex,fit,paper=letter"
   ],
   "baby lock solaris 3 complete manual set sewing embroidery emboidery design": [
     "color,1-603,duplex,fit,paper=letter"
@@ -677,5 +675,98 @@
   ],
   "leica m11": [
     "color,1-177,duplexshort,fit,paper=letter,landscape"
+  ],
+  "icom ic-706mkiig service": [
+    "color,1-86,duplex,fit,paper=letter"
+  ],
+  "nikon z6 ii z7 ii": [
+    "color,1-879,duplex,fit,paper=letter"
+  ],
+  "ricoh grii ": [
+    "monochrome,1-184,duplex,fit,paper=letter"
+  ],
+  "icom ic-746pro": [
+    "color,1-116,duplex,fit,paper=letter"
+  ],
+  "yamaha dgx-640": [
+    "monochrome,1-120,duplex,fit,paper=letter"
+  ],
+  "kenwood ts-890s_idm": [
+    "color,1-96,duplex,fit,paper=letter"
+  ],
+  "ppcrom-um": [
+    "monochrome,1-504,duplex,fit,paper=letter"
+  ],
+  "kubota l2550": [
+    "monochrome,1-68,duplex,fit,paper=letter"
+  ],
+  "pentax k-70": [
+    "monochrome,1-156,duplexshort,fit,paper=letter,landscape"
+  ],
+  "singer 4423": [
+    "color,1-33,duplexshort,fit,paper=letter,landscape"
+  ],
+  "rolleiflex 3.5f": [
+    "color,1-35,duplexshort,fit,paper=letter,landscape"
+  ],
+  "canon powershot sx620 hs": [
+    "color,1-157,duplexshort,fit,paper=letter,landscape"
+  ],
+  "hp41-pac-advantage-en_letter": [
+    "color,1-156,duplexshort,fit,paper=letter,landscape"
+  ],
+  "hp 75 surveying pac owner's manual": [
+    "color,1-124,duplexshort,fit,paper=letter,landscape"
+  ],
+  "owners manual for gopro hero 13 black camera - half-letter size": [
+    "color,1-148,duplexshort,fit,paper=letter,landscape"
+  ],
+  "hp32s-engineering-en": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-118,duplex,fit,paper=letter"
+  ],
+  "yaesu ft-920": [
+    "monochrome,1-121,duplex,fit,paper=letter"
+  ],
+  "olympus e-m10 mark iii": [
+    "monochrome,1-173,duplex,fit,paper=letter"
+  ],
+  "icom ic-706mk2 instruction": [
+    "monochrome,1-64,duplex,fit,paper=letter"
+  ],
+  "icom ic-706mkiig instruction": [
+    "monochrome,1-75,duplex,fit,paper=letter"
+  ],
+  "hp41-inside": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-276,duplex,fit,paper=letter"
+  ],
+  "olympus e-m1 mark ii": [
+    "monochrome,1-219,duplex,fit,paper=letter"
+  ],
+  "kodak pixpro fz43": [
+    "color,1-86,duplexshort,fit,paper=letter,landscape"
+  ],
+  "kubota b2710 b2910 b7800": [
+    "monochrome,1-75,duplex,fit,paper=letter"
+  ],
+  "hp85": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-343,duplex,fit,paper=letter"
+  ],
+  "nikon d7000": [
+    "monochrome,1-348,duplex,fit,paper=letter"
+  ],
+  "rolleiflex 2.8": [
+    "color,1-16,duplexshort,fit,paper=letter,landscape"
+  ],
+  "sony hvr-s270": [
+    "monochrome,1-136,duplex,fit,paper=letter"
+  ],
+  "canon powershot g7x mark ii": [
+    "color,1-225,duplexshort,fit,paper=letter,landscape"
   ]
 }

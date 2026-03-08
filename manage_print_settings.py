@@ -165,7 +165,7 @@ def build_rules(page_count: int, color_mode: str, orientation: str, first_page_c
         return [
             "color,1,simplex,fit,paper=letter",
             "monochrome,2,simplex,fit,paper=letter",
-            f"monochrome,3-{n},simplex,fit,paper=letter",
+            f"monochrome,3-{n},duplex,fit,paper=letter",
         ]
 
     # Otherwise: single rule duplex portrait
@@ -230,7 +230,7 @@ def main() -> None:
     first_page_color_only = False
     if mode == "color" and orientation == "portrait":
         first_page_color_only = ask_yes_no(
-            "Apply color to first page only, rest monochrome (simplex pattern)?",
+            "Apply color to first page only, rest monochrome?",
             default=False,
         )
 
