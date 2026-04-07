@@ -464,7 +464,14 @@ col_left_options = [
     [sg.Button(
         "Manage print settings",
         key="-MANAGE_PRINT_SETTINGS-",
-        pad=((0, 0), (8, 0))   # ← adds vertical space ABOVE the button
+        size=(22, 1),
+        pad=((0, 0), (8, 0))
+    )],
+    [sg.Button(
+        "Reload Database",
+        key="-RELOAD_DATABASES-",
+        size=(22, 1),
+        pad=((0, 0), (10, 0))
     )]
 
 ]
@@ -572,8 +579,8 @@ left_column = [
             "Tools",
             [[
                 sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(25, 1))] for (lbl, script) in col1], pad=(0, 0)),
-                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(25, 1))] for (lbl, script) in col2], pad=(8, 0)),
-                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(25, 1))] for (lbl, script) in col3], pad=(8, 0)),
+                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(25, 1))] for (lbl, script) in col2], pad=(28, 0)),
+                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(25, 1))] for (lbl, script) in col3], pad=(28, 0)),
             ]],
             expand_x=True,
         )
@@ -616,6 +623,7 @@ right_column = [
         sg.Push(),
         sg.Button("View purchase history", key="-PURCHASE_HISTORY-", disabled=True),
         sg.Button("Sell similar item", key="-SELL_SIMILAR-", disabled=True),
+        sg.Button("Reload funds", key="-RELOAD_FUNDS-"),
         sg.Push(),
     ],
     [
@@ -922,6 +930,57 @@ def get_selected_printer_number(values) -> int:
     # matches your existing logic: 1 if PRN1 checked else 2
     return 1 if values.get("-PRN1-", False) else 2
 
+def reload_combo_databases(values):
+    """Reload data sources used by the cover, PDF matches, and ISO matches comboboxes."""
+    global cover_choices, current_fuzzy_matches, current_iso_matches, listings_db, print_settings_db
+
+    cover_choices = list_cover_images()
+    current_cover = values.get("-COVERFILE-", "")
+    if current_cover in cover_choices:
+        cover_value = current_cover
+    else:
+        cover_value = cover_choices[0] if cover_choices else ""
+    window["-COVERFILE-"].update(values=cover_choices, value=cover_value)
+
+    pdf_query = values.get("-SEARCHTXT-", "").strip()
+    if pdf_query:
+        current_fuzzy_matches = fuzzy_find_pdfs(pdf_query)
+        if current_fuzzy_matches:
+            pdf_values = [os.path.basename(m) for m in current_fuzzy_matches]
+            current_pdf_choice = values.get("-SEARCHRESULT-", "")
+            pdf_value = current_pdf_choice if current_pdf_choice in pdf_values else pdf_values[0]
+            window["-SEARCHRESULT-"].update(values=pdf_values, value=pdf_value)
+            for fullpath in current_fuzzy_matches:
+                if os.path.basename(fullpath) == pdf_value:
+                    set_pdf_preview(fullpath, page=1)
+                    break
+        else:
+            current_fuzzy_matches = []
+            window["-SEARCHRESULT-"].update(values=["(no matches)"], value="(no matches)")
+            set_pdf_preview(None)
+    else:
+        current_fuzzy_matches = []
+        window["-SEARCHRESULT-"].update(values=["(no matches)"], value="(no matches)")
+        set_pdf_preview(None)
+
+    iso_query = values.get("-ISO_SEARCHTXT-", "").strip()
+    if iso_query:
+        current_iso_matches = fuzzy_find_isos(iso_query)
+        if current_iso_matches:
+            iso_values = [p.name for p in current_iso_matches]
+            current_iso_choice = values.get("-ISO_RESULT-", "")
+            iso_value = current_iso_choice if current_iso_choice in iso_values else iso_values[0]
+            window["-ISO_RESULT-"].update(values=iso_values, value=iso_value)
+        else:
+            current_iso_matches = []
+            window["-ISO_RESULT-"].update(values=["(no matches)"], value="(no matches)")
+    else:
+        current_iso_matches = []
+        window["-ISO_RESULT-"].update(values=["(no matches)"], value="(no matches)")
+
+    listings_db = load_listings_db(os.path.join(os.getcwd(), LISTINGS_JSON))
+    print_settings_db = load_print_settings_db(os.path.join(os.getcwd(), PRINT_SETTINGS_JSON))
+
 # ---------- revenue at startup ----------
 TOTAL_FUNDS_RE = re.compile(r"Total\s+funds:\s*\$?\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
 
@@ -1045,6 +1104,10 @@ while True:
             window["-SEARCHRESULT-"].update(values=["(no matches)"], value="(no matches)")
             set_pdf_preview(None)
             
+    if event == "-RELOAD_DATABASES-":
+        reload_combo_databases(values)
+        window["-STATUS-"].update("Reloaded cover, PDF matches, and ISO matches")
+
     if event == "-MANAGE_PRINT_SETTINGS-":
         tab_idx = get_active_tab()
 
@@ -1156,6 +1219,10 @@ while True:
             open_url(build_sell_similar_url(current_item_id))
         else:
             output_queues[get_active_tab()].put("No itemId for current PDF (check ebay_links.json).\n")
+
+    if event == "-RELOAD_FUNDS-":
+        update_total_funds_at_startup()
+        window["-STATUS-"].update("Total funds reloaded")
 
     # ----- Orders buttons -----
     if event == "-ORDERS-":

@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
+##!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
 
 import argparse
 import csv
-import os
-import sys, io
+import io
 import re
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,16 +27,14 @@ ALL_ORDERS_URL = "https://www.ebay.com/sh/ord/?filter=status:ALL_ORDERS"
 RE_ORDER_FULL = re.compile(r"^\d{2}-\d{5}-\d{5}$")   # e.g. 27-13984-70927
 RE_AVAILABLE = re.compile(r"\((\d+)\s+available\)", re.IGNORECASE)
 RE_PRICE = re.compile(r"\$?\s*([0-9]+(?:\.[0-9]{2})?)")
-
-# Accept manual/guide/handbook
 RE_MANUAL = re.compile(r"\b(manual|guide|handbook)\b", re.IGNORECASE)
-
 
 try:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 except Exception:
     pass
+
 
 @dataclass(frozen=True)
 class AccountSpec:
@@ -91,6 +89,18 @@ def parse_price(text: str) -> float | None:
         return None
 
 
+def safe_int(value, default=None):
+    try:
+        if value is None:
+            return default
+        s = str(value).strip()
+        if not s:
+            return default
+        return int(s)
+    except Exception:
+        return default
+
+
 def find_row_container(el, max_hops=12):
     """
     Walk up the DOM until we reach something row-ish.
@@ -129,28 +139,42 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
 
     scroll_to_bottom(driver, steps=6, pause_s=0.5)
 
+    # Start from item links, but deduplicate by ROW CONTAINER first,
+    # not by item_id/title.
     item_links = driver.find_elements(By.XPATH, "//a[contains(@href,'/itm/')]")
     if debug:
         print(f"Found /itm/ anchors: {len(item_links)}")
 
     rows = []
-    seen = set()
+    seen_row_signatures = set()
 
     for a in item_links:
         try:
-            href = (a.get_attribute("href") or "").strip()
-            title = (a.text or "").strip()
+            row = find_row_container(a)
 
+            # Build a stable signature from the visible row text.
+            # This prevents duplicate processing of the same DOM row,
+            # while still keeping separate buyer orders for the same item.
+            row_text = " ".join((row.text or "").split())
+            if not row_text:
+                continue
+
+            row_sig = row_text
+            if row_sig in seen_row_signatures:
+                continue
+            seen_row_signatures.add(row_sig)
+
+            # Item link for this row
+            try:
+                item_el = row.find_element(By.XPATH, ".//a[contains(@href,'/itm/')]")
+            except Exception:
+                item_el = a
+
+            href = (item_el.get_attribute("href") or "").strip()
+            title = (item_el.text or "").strip()
             item_id = extract_item_id_from_url(href)
             if not item_id:
                 continue
-
-            key = (item_id, title)
-            if key in seen:
-                continue
-            seen.add(key)
-
-            row = find_row_container(a)
 
             # order number anchor
             order_full = ""
@@ -164,10 +188,10 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
                     order_full = cand
             except Exception:
                 try:
-                    order_el = row.find_element(By.XPATH, ".//a[normalize-space(.)]")
-                    cand = (order_el.text or "").strip()
-                    if RE_ORDER_FULL.match(cand):
-                        order_full = cand
+                    # fallback: search any text in the row matching full order pattern
+                    m = RE_ORDER_FULL.search(row_text)
+                    if m:
+                        order_full = m.group(0)
                 except Exception:
                     order_full = ""
 
@@ -195,8 +219,24 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
             except Exception:
                 pass
 
+            # More robust fallback for quantity sold:
+            # look for patterns like "2 sold" or "Qty 2" anywhere in row text
+            if qty_sold is None:
+                m = re.search(r"\b(\d+)\s+sold\b", row_text, re.IGNORECASE)
+                if m:
+                    qty_sold = int(m.group(1))
+                else:
+                    m = re.search(r"\bqty\b[:\s]+(\d+)\b", row_text, re.IGNORECASE)
+                    if m:
+                        qty_sold = int(m.group(1))
+
             # price
             price_text = safe_find_text(row, By.CSS_SELECTOR, "div.price-column-item")
+            if not price_text:
+                m = re.search(r"\$[0-9]+(?:\.[0-9]{2})?", row_text)
+                if m:
+                    price_text = m.group(0)
+
             price = parse_price(price_text)
 
             rows.append({
@@ -249,7 +289,61 @@ def filter_rows_by_manual(rows, enabled=True):
             out.append(r)
     return out
 
+def expand_rows_by_quantity(rows, debug=False, max_expand_qty=20):
+    """
+    Duplicate rows when qty_sold > 1, but protect against bogus huge values.
 
+    Rules:
+    - blank / invalid qty -> treat as 1
+    - qty < 1 -> treat as 1
+    - qty > max_expand_qty -> treat as 1 and warn in debug mode
+    """
+
+    expanded = []
+
+    for r in rows:
+        raw_qty = r.get("qty_sold")
+
+        try:
+            qty = int(str(raw_qty).strip()) if str(raw_qty).strip() else 1
+        except Exception:
+            qty = 1
+
+        if qty < 1:
+            qty = 1
+
+        if qty > max_expand_qty:
+            if debug:
+                print(
+                    f"[WARN] Suspicious qty_sold={qty} for "
+                    f"order={r.get('order_full','')} item={r.get('item_id','')} "
+                    f"title={r.get('title','')[:80]!r}. "
+                    f"Using 1 instead."
+                )
+            qty = 1
+
+        if qty == 1:
+            rr = dict(r)
+            rr["qty_sold_original"] = str(raw_qty).strip() if raw_qty is not None else ""
+            rr["line_instance"] = "1"
+            rr["qty_sold"] = "1"
+            expanded.append(rr)
+            continue
+
+        if debug:
+            print(
+                f"[INFO] Expanding order={r.get('order_full','')} "
+                f"item={r.get('item_id','')} into {qty} lines"
+            )
+
+        for i in range(1, qty + 1):
+            rr = dict(r)
+            rr["qty_sold_original"] = str(raw_qty).strip() if raw_qty is not None else str(qty)
+            rr["line_instance"] = str(i)
+            rr["qty_sold"] = "1"
+            expanded.append(rr)
+
+    return expanded
 def print_table(rows, headers=None, max_widths=None):
     if not rows:
         print("(no rows)")
@@ -284,26 +378,39 @@ def print_table(rows, headers=None, max_widths=None):
         print(sep.join(fmt_cell(h, r.get(h, "")) for h in headers))
 
 
+def archive_existing_file(path: Path) -> Path | None:
+    """
+    If path already exists, rename it to an archive file with timestamp.
+    """
+    if not path.exists():
+        return None
+
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    archived = path.with_name(f"{path.stem}_archive_{ts}{path.suffix}")
+    path.rename(archived)
+    return archived
+
+
 def write_csv(rows, path: Path, headers: list[str] | None = None):
     if not rows:
-        return
+        return None
+
     if headers is None:
         headers = list(rows[0].keys())
+
+    archived = archive_existing_file(path)
+
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=headers)
         w.writeheader()
         w.writerows(rows)
 
+    return archived
+
 
 def kill_chrome_using_profile(profile_dir: Path, debug: bool = True, kill_driver: bool = False) -> None:
     """
     Kill Chrome processes that were launched with --user-data-dir pointing to profile_dir.
-
-    This is a pragmatic recovery mechanism when a previous Selenium run stalls and
-    leaves Chrome running forever.
-
-    kill_driver:
-        If True, also kill chromedriver processes (rarely necessary).
     """
     profile_dir_abs = str(profile_dir.resolve())
     hit = 0
@@ -328,8 +435,6 @@ def kill_chrome_using_profile(profile_dir: Path, debug: bool = True, kill_driver
                     proc.kill()
 
             if kill_driver and is_driver:
-                # chromedriver won't typically include the profile in cmdline, so we only do this
-                # when explicitly requested.
                 hit += 1
                 if debug:
                     print(f"[INFO] Killing chromedriver PID={proc.pid}")
@@ -338,9 +443,9 @@ def kill_chrome_using_profile(profile_dir: Path, debug: bool = True, kill_driver
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
 
-    if debug:
-        if hit == 0:
-            print(f"[INFO] No stale Chrome found for profile: {profile_dir_abs}")
+    if debug and hit == 0:
+        print(f"[INFO] No stale Chrome found for profile: {profile_dir_abs}")
+
     time.sleep(0.5)
 
 
@@ -360,7 +465,6 @@ def build_driver(profile_dir: Path, headless: bool, chrome_binary: str | None = 
 
 
 def scrape_account(account: AccountSpec, url: str, args) -> list[dict]:
-    # NEW: kill stale Chrome using this profile (unless disabled)
     if not args.no_kill_profile:
         kill_chrome_using_profile(account.profile_dir, debug=args.debug, kill_driver=args.kill_chromedriver)
 
@@ -380,6 +484,8 @@ def scrape_account(account: AccountSpec, url: str, args) -> list[dict]:
             r["account"] = account.name
 
         rows = filter_rows_by_manual(rows, enabled=not args.no_manual_filter)
+        rows = expand_rows_by_quantity(rows, debug=args.debug)
+
         return rows
     finally:
         driver.quit()
@@ -411,7 +517,6 @@ def main():
     ap.add_argument("--no-manual-filter", action="store_true",
                     help="Disable the default filter that keeps only items with 'manual|guide|handbook' in the title.")
 
-    # NEW: stale Chrome killer flags
     ap.add_argument("--no-kill-profile", action="store_true",
                     help="Do NOT kill stale Chrome processes using the same Selenium profile(s) before starting.")
     ap.add_argument("--kill-chromedriver", action="store_true",
@@ -442,7 +547,6 @@ def main():
         rows = scrape_account(acc, url, args)
         combined_rows.extend(rows)
 
-    # Stable CSV headers
     preferred = [
         "account",
         "order_number",
@@ -451,6 +555,8 @@ def main():
         "title",
         "item_url",
         "qty_sold",
+        "qty_sold_original",
+        "line_instance",
         "qty_available",
         "price",
         "price_text",
@@ -458,12 +564,9 @@ def main():
     headers = preferred
 
     page_tag = "all_orders" if args.all_orders else "awaiting_shipment"
-    manual_tag = "manuals" if not args.no_manual_filter else "all_items"
     csv_name = (
-        #f"{page_tag}_{manual_tag}_both_accounts.csv"
         f"{page_tag}_items.csv"
         if args.account == "both"
-        #else f"{page_tag}_{manual_tag}_{args.account}.csv"
         else f"{page_tag}_{args.account}.csv"
     )
     out_csv = out_dir / csv_name
@@ -473,13 +576,21 @@ def main():
         short_headers = ["account", "item_id", "title"]
         print_table(combined_rows, headers=short_headers, max_widths={"title": 90})
     else:
-        print_table(combined_rows, headers=headers, max_widths={"title": 60, "item_url": 60, "price_text": 40})
+        print_table(
+            combined_rows,
+            headers=headers,
+            max_widths={"title": 60, "item_url": 60, "price_text": 40}
+        )
 
+    archived = None
     if combined_rows:
-        write_csv(combined_rows, out_csv, headers=headers)
+        archived = write_csv(combined_rows, out_csv, headers=headers)
 
     print(f"\nSaved CSV: {out_csv}")
+    if archived:
+        print(f"Previous CSV archived as: {archived}")
     print(f"Rows kept: {len(combined_rows)}")
+
     if not args.no_manual_filter:
         print("Filter applied: title contains 'manual' or 'guide' or 'handbook' (case-insensitive).")
     else:
