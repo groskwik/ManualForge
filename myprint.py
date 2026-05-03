@@ -26,8 +26,8 @@ MANUALS_CSV_PATH = r"C:\Users\benoi\Downloads\ManualForge\manuals.csv"
 
 # Available printers
 PRINTERS = {
-    "1": "Brother HL-L8360CDW [Wireless]",
-    "2": "Brother HL-L8360CDW series"
+    "1": "Brother HL-L8360CDW Series",
+    "2": "Brother HL-L8360CDW Series 2"
 }
 
 

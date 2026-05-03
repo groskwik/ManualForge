@@ -203,7 +203,7 @@
     "monochrome,3-219,duplex,fit,paper=letter"
   ],
   "bernette b77": [
-    "color,1-103,duplex,fit,paper=letter"
+    "color,1-104,duplex,fit,paper=letter"
   ],
   "pioneer dvl-909": [
     "monochrome,1,simplex,fit,paper=letter",
@@ -436,7 +436,7 @@
     "monochrome,1-134,duplex,fit,paper=letter"
   ],
   "gopro hero 9 black camera": [
-    "color,3-145,duplex,fit,paper=letter"
+    "color,1-145,duplex,fit,paper=letter"
   ],
   "baby lock blsa3-embroidery": [
     "color,3-191,duplex,fit,paper=letter"
@@ -796,5 +796,31 @@
   ],
   "gopro hero 6 black": [
     "color,1-98,duplex,fit,paper=letter"
+  ],
+  "hp28hp48-discover-calculus": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-291,duplex,fit,paper=letter",
+    "color,292,simplex,fit,paper=letter"
+  ],
+  "nec pc-8201 service manual": [
+    "monochrome,1-136,duplex,fit,paper=letter"
+  ],
+  "hewlett packard hp-65 calculator manual – half-letter size": [
+    "color,1-58,duplexshort,fit,paper=letter,landscape"
+  ],
+  "singer 3337 simple sewing machine manual - half-letter size": [
+    "color,1-52,duplexshort,fit,paper=letter,landscape"
+  ],
+  "boss ve500": [
+    "monochrome,1-20,duplex,fit,paper=letter"
+  ],
+  "manual for hewlett packard hp-41c calculator financial pac": [
+    "color,1-30,duplexshort,fit,paper=letter,landscape"
+  ],
+  "singer 4411": [
+      "color,1,simplexshort,fit,paper=letter,landscape",
+      "color,2,simplexshort,fit,paper=letter,landscape",
+    "monochrome,3-62,duplexshort,fit,paper=letter,landscape"
   ]
 }
