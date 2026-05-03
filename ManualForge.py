@@ -8,8 +8,39 @@ import os
 import json
 import re
 import webbrowser
+import argparse
 from pathlib import Path
 from typing import List
+
+# ---------- startup arguments ----------
+_parser = argparse.ArgumentParser(description="ManualForge GUI")
+_parser.add_argument(
+    "--small",
+    action="store_true",
+    default=False,
+    help="Compact layout for small screens (e.g. 1366x768 laptops). "
+         "Reduces console height, preview height, and multiline sizes.",
+)
+_args, _unknown = _parser.parse_known_args()
+SMALL_SCREEN = _args.small
+
+# Layout constants – tweak these two lines to taste
+# Normal:  console 15 rows, preview 650 px
+# --small: console  8 rows, preview 380 px
+_CONSOLE_ROWS   = 8  if SMALL_SCREEN else 15
+_PREVIEW_HEIGHT = 380 if SMALL_SCREEN else 650
+
+# Left-panel width constants
+_BTN_TOOL_W     = 18  if SMALL_SCREEN else 25   # tool grid buttons
+_BTN_TOOL_PAD   = 16  if SMALL_SCREEN else 28   # gap between tool columns
+_OPT_COMBO_W    = 20  if SMALL_SCREEN else 28   # Cover / Matches combos
+_OPT_INPUT_W    = 22  if SMALL_SCREEN else 30   # Search PDF input
+_OPT_BTN_W      = 16  if SMALL_SCREEN else 22   # Manage / Reload buttons
+_OPT_COL_PAD    = 8   if SMALL_SCREEN else 15   # gap between option sub-columns
+_ISO_INPUT_W    = 22  if SMALL_SCREEN else 30   # Search ISO input
+_ISO_COMBO_W    = 20  if SMALL_SCREEN else 28   # ISO matches combo
+_SLIDER_W       = 11  if SMALL_SCREEN else 15   # Ratio slider
+_SEND_INPUT_W   = 35  if SMALL_SCREEN else 50   # console Send input
 
 # try to import PyMuPDF for PDF preview
 try:
@@ -227,7 +258,9 @@ def get_pdf_page_count(pdf_path):
     except Exception:
         return None
 
-def render_pdf_page_to_bytes(pdf_path, page_index=0, max_height=700):
+def render_pdf_page_to_bytes(pdf_path, page_index=0, max_height=None):
+    if max_height is None:
+        max_height = _PREVIEW_HEIGHT
     if fitz is None:
         return None
     try:
@@ -269,8 +302,10 @@ def compute_weight_from_pages(pages: int) -> str:
         return f"{ounces} oz"
     return f"{pounds} lb {ounces} oz"
 
-def load_image_as_png_bytes(path, max_height=700):
+def load_image_as_png_bytes(path, max_height=None):
     """Open jpg/png → resize → return PNG bytes safe for sg.Image."""
+    if max_height is None:
+        max_height = _PREVIEW_HEIGHT
     if not os.path.exists(path):
         return None
     if not is_supported_image(path):
@@ -438,7 +473,7 @@ col_left_options = [
         cover_choices,
         default_value=cover_choices[0],
         key="-COVERFILE-",
-        size=(28, 1),
+        size=(_OPT_COMBO_W, 1),
         background_color="white",
         text_color="black",
         tooltip="Image file used for cover/lightscribe (PNG or JPG)",
@@ -446,7 +481,7 @@ col_left_options = [
     [sg.Text("Search PDF:", tooltip="Type part of the PDF name – same logic as your scripts")],
     [sg.Input(
         key="-SEARCHTXT-",
-        size=(30, 1),
+        size=(_OPT_INPUT_W, 1),
         enable_events=True,
         tooltip="Type part of the PDF name here – will be auto-sent to scripts",
     )],
@@ -455,7 +490,7 @@ col_left_options = [
         ["(no matches)"],
         default_value="(no matches)",
         key="-SEARCHRESULT-",
-        size=(28, 1),
+        size=(_OPT_COMBO_W, 1),
         background_color="white",
         text_color="black",
         enable_events=True,
@@ -464,13 +499,13 @@ col_left_options = [
     [sg.Button(
         "Manage print settings",
         key="-MANAGE_PRINT_SETTINGS-",
-        size=(22, 1),
+        size=(_OPT_BTN_W, 1),
         pad=((0, 0), (8, 0))
     )],
     [sg.Button(
         "Reload Database",
         key="-RELOAD_DATABASES-",
-        size=(22, 1),
+        size=(_OPT_BTN_W, 1),
         pad=((0, 0), (10, 0))
     )]
 
@@ -478,8 +513,8 @@ col_left_options = [
 
 col_mid_options = [
     [sg.Text("Printer:")],
-    [sg.Radio("Brother HL-L8360CDW [Wireless]", "PRN", key="-PRN1-", default=False)],
-    [sg.Radio("Brother HL-L8360CDW series", "PRN", key="-PRN2-", default=True)],
+    [sg.Radio("Brother HL-L8360CDW Series", "PRN", key="-PRN1-", default=False)],
+    [sg.Radio("Brother HL-L8360CDW Series 2", "PRN", key="-PRN2-", default=True)],
     [sg.Text("Preview page:")],
     [
         sg.Combo(
@@ -504,7 +539,7 @@ col_right_options = [
         default_value=0.5,
         resolution=0.01,
         orientation="h",
-        size=(15, 15),
+        size=(_SLIDER_W, 15),
         key="-RATIO-",
         enable_events=True,
     )],
@@ -518,7 +553,7 @@ col_right_options = [
     [sg.Text("Search ISO:", tooltip=f"Type part of the ISO name in {ISO_FOLDER}")],
     [sg.Input(
         key="-ISO_SEARCHTXT-",
-        size=(30, 1),
+        size=(_ISO_INPUT_W, 1),
         enable_events=True,
         tooltip="Type part of the ISO name here – used to auto-answer isoburn.py",
     )],
@@ -527,7 +562,7 @@ col_right_options = [
         ["(no matches)"],
         default_value="(no matches)",
         key="-ISO_RESULT-",
-        size=(28, 1),
+        size=(_ISO_COMBO_W, 1),
         background_color="white",
         text_color="black",
         enable_events=True,
@@ -548,7 +583,7 @@ def make_console_tab(i: int, visible: bool):
         [
             [sg.Multiline(
                 "",
-                size=(90, 15),  # reduced to make room for additional UI
+                size=(90, _CONSOLE_ROWS),
                 key=f"-OUTPUT-{i}-",
                 autoscroll=True,
                 font=DEFAULT_OUTPUT_FONT,
@@ -557,7 +592,7 @@ def make_console_tab(i: int, visible: bool):
                 expand_y=True,
             )],
             [
-                sg.Input(key=f"-SEND-{i}-", size=(50, 1)),
+                sg.Input(key=f"-SEND-{i}-", size=(_SEND_INPUT_W, 1)),
                 sg.Button("Send Command", key=f"-SEND_BTN-{i}-"),
                 sg.Button("Stop", key=f"-STOP-{i}-"),
                 sg.Button("Clear", key=f"-CLEAR-{i}-"),
@@ -578,9 +613,9 @@ left_column = [
         sg.Frame(
             "Tools",
             [[
-                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(25, 1))] for (lbl, script) in col1], pad=(0, 0)),
-                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(25, 1))] for (lbl, script) in col2], pad=(28, 0)),
-                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(25, 1))] for (lbl, script) in col3], pad=(28, 0)),
+                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(_BTN_TOOL_W, 1))] for (lbl, script) in col1], pad=(0, 0)),
+                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(_BTN_TOOL_W, 1))] for (lbl, script) in col2], pad=(_BTN_TOOL_PAD, 0)),
+                sg.Column([[sg.Button(lbl, key=("RUN_TOOL", script), size=(_BTN_TOOL_W, 1))] for (lbl, script) in col3], pad=(_BTN_TOOL_PAD, 0)),
             ]],
             expand_x=True,
         )
@@ -590,8 +625,8 @@ left_column = [
             "Options",
             [[
                 sg.Column(col_left_options, vertical_alignment="top"),
-                sg.Column(col_mid_options, pad=(15, 0), vertical_alignment="top"),
-                sg.Column(col_right_options, pad=(15, 0), vertical_alignment="top"),
+                sg.Column(col_mid_options, pad=(_OPT_COL_PAD, 0), vertical_alignment="top"),
+                sg.Column(col_right_options, pad=(_OPT_COL_PAD, 0), vertical_alignment="top"),
             ]],
             expand_x=True,
         )
@@ -610,7 +645,7 @@ left_column = [
 
 right_column = [
     [sg.Text("Preview:")],
-    [sg.Image(key="-PREVIEW-", size=(400, 650))],
+    [sg.Image(key="-PREVIEW-", size=(400, _PREVIEW_HEIGHT))],
     [sg.Push(), sg.Button("← Prev", key="-PREV_PAGE-"), sg.Button("Next →", key="-NEXT_PAGE-"), sg.Push()],
     [
         sg.Push(),
