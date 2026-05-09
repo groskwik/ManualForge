@@ -18,7 +18,9 @@ SUMATRA_PATH = r"C:\portableapps\sumatrapdf\sumatrapdf.exe"
 # Folders where PDFs are stored
 PDF_FOLDERS = [
     r"C:\Users\benoi\Downloads\ebay_manuals",
-    r"C:\Users\benoi\Downloads\manuals"
+    r"C:\Users\benoi\Downloads\manuals",
+    r"/home/benoit/Downloads/manuals",
+    r"/home/benoit/Downloads/ebay_manuals"
 ]
 
 # Hard-coded CSV path (as requested)

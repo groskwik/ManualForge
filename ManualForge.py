@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import PySimpleGUI as sg
 import subprocess
 import threading
 import queue
@@ -11,6 +10,8 @@ import webbrowser
 import argparse
 from pathlib import Path
 from typing import List
+import PySimpleGUI as sg
+
 
 # ---------- startup arguments ----------
 _parser = argparse.ArgumentParser(description="ManualForge GUI")
@@ -60,6 +61,8 @@ except ImportError:
 PDF_FOLDERS = [
     r"C:\Users\benoi\Downloads\ebay_manuals",
     r"C:\Users\benoi\Downloads\manuals",
+    r"/home/benoit/Downloads/manuals",
+    r"/home/benoit/Downloads/ebay_manuals"
 ]
 
 # ISO burning folder (same as isoburn.py default)
