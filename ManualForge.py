@@ -518,7 +518,14 @@ col_mid_options = [
     [sg.Text("Printer:")],
     [sg.Radio("Brother HL-L8360CDW Series", "PRN", key="-PRN1-", default=False)],
     [sg.Radio("Brother HL-L8360CDW Series 2", "PRN", key="-PRN2-", default=True)],
-    [sg.Text("Preview page:")],
+    [sg.Checkbox(
+        "Manual 2-sided",
+        key="-MANUAL2SIDED-",
+        default=False,
+        tooltip="Use manual two-sided printing for Print manual and Print360",
+        pad=((0, 0), (8, 0)),
+    )],
+    [sg.Text("Preview page:", pad=((0, 0), (16, 0)))],
     [
         sg.Combo(
             ["1"],
@@ -1344,10 +1351,15 @@ while True:
                 "--orders-csv", AWAITING_CSV,
                 "--links-json", LISTINGS_JSON,
                 "--out-links-json", LISTINGS_JSON,
-                "--print360",
                 "--printer", prn,
             ]
-            _start_process(tab_idx, cmd, "ebay_linker.py (print360)")
+            if values.get("-MANUAL2SIDED-", False):
+                cmd.extend(["--print360manual2sided", "--myprint", MYPRINT_PATH])
+                label = "ebay_linker.py (print360 manual 2-sided)"
+            else:
+                cmd.append("--print360")
+                label = "ebay_linker.py (print360)"
+            _start_process(tab_idx, cmd, label)
 
     if event == "-UPDATE_LINKS-":
         tab_idx = get_active_tab()
@@ -1563,6 +1575,9 @@ while True:
                 if coverfile:
                     extra_args.append(f"--cover={coverfile}")
 
+            if script == "myprint.py" and values.get("-MANUAL2SIDED-", False):
+                extra_args.append("-manual2sided")
+
             if script in scripts_that_need_pdf:
                 if script == "myprint.py":
                     auto_inputs.append("1" if values["-PRN1-"] else "2")
@@ -1661,4 +1676,3 @@ while True:
             procs[i] = None
 
 window.close()
-
