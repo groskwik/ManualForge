@@ -47,11 +47,32 @@ Built with **Python**, **PySimpleGUI**, **PyMuPDF**, **Pillow**, and **pypdf**.
 - JPG & PNG support  
 
 ### 🖨 Printing Integrations
-- Uses presets from `listpdf.py`
+- Uses presets from `myprint.py` / `print_settings.json`
 - Multipage ranges  
 - Duplex/simplex  
 - Color/mono  
 - Works with SumatraPDF, GhostScript, or Windows printing  
+- Manual 2-sided checkbox for printers with unreliable automatic duplex printing
+- `Print manual` can run `myprint.py -manual2sided` from the GUI
+- `Print360` can run the manual two-sided print360 workflow from the GUI
+
+### 🔁 Manual 2-Sided GUI Option
+The GUI includes a `Manual 2-sided` checkbox below the printer selection.
+
+When checked:
+
+- `Print manual` uses `myprint.py -manual2sided`.
+- `Print360` uses `ebay_linker.py --print360manual2sided`.
+- The first pass prints even/simplex pages.
+- The second pass uses the matching ` Quiet` printer.
+- `Print720` is not affected yet.
+
+Example printer pair:
+
+```text
+Brother HL-L8360CDW Series 2
+Brother HL-L8360CDW Series 2 Quiet
+```
 
 ### 🔍 Fast PDF Search
 - Partial match search  
@@ -75,6 +96,7 @@ ManualForge/
 │   ├── icons/
 │
 └── README.md
+```
 
 
 ## 📜 License
