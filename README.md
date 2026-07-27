@@ -63,9 +63,12 @@ When checked:
 
 - `Print manual` uses `myprint.py -manual2sided`.
 - `Print360` uses `ebay_linker.py --print360manual2sided`.
+- `Print720` uses `ebay_linker.py --print720manual2sided`.
 - The first pass prints even/simplex pages.
 - The second pass uses the matching ` Quiet` printer.
-- `Print720` is not affected yet.
+- Print720 manual mode assigns whole manuals to one printer only; it does not split one manual across both printers.
+
+The `Second pass` checkbox reruns only the odd-page pass for `Print manual`, `Print360`, or `Print720`.
 
 Example printer pair:
 

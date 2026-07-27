@@ -11,12 +11,14 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+import importlib.util
 from pathlib import Path
 from threading import Lock
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from urllib.parse import urlparse
 
 try:
@@ -327,16 +329,14 @@ def read_orders_csv(path: Path) -> List[Dict[str, str]]:
 
 
 def order_item_id(row: Dict[str, str]) -> str:
-    """Return the eBay item id from the CSV column, or extract it from item_url.
+    """Return the eBay item id, preferring the URL when available.
 
-    Some awaiting_shipment_items.csv exports leave item_id blank. In that case,
-    the URL still usually contains /itm/<item_id>, which is enough to match
-    an existing record in ebay_links.json and avoid asking for a fuzzy match.
+    Some exports have stale or duplicated item_id values while item_url is
+    correct. The URL is the safer source because it identifies this line item.
     """
     item_id = (row.get("item_id") or "").strip()
-    if item_id:
-        return item_id
-    return extract_item_id_from_url((row.get("item_url") or "").strip())
+    url_item_id = extract_item_id_from_url((row.get("item_url") or "").strip())
+    return url_item_id or item_id
 
 
 # =============================================================================
@@ -606,6 +606,873 @@ class Print360Resume:
     pdf: PdfEntry
     total_pages: int
     next_page: int
+
+
+@dataclass
+class Print360ManualTask:
+    order_index: int
+    pdf: PdfEntry
+    print_path: Path
+    original_pages: int
+    padded_pages: int
+    page_range: str
+    padded: bool
+    effective_settings: Optional[List[str]] = None
+
+
+def load_myprint_module(myprint_path: str) -> Any:
+    path = Path(myprint_path)
+    if not path.is_absolute():
+        path = Path(__file__).with_name(myprint_path)
+    spec = importlib.util.spec_from_file_location("manualforge_myprint", str(path))
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load myprint module from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def create_padded_pdf(original: Path, out_dir: Path) -> Path:
+    try:
+        from pypdf import PdfReader, PdfWriter  # type: ignore
+    except Exception:
+        from PyPDF2 import PdfReader, PdfWriter  # type: ignore
+
+    reader = PdfReader(str(original))
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+
+    last_page = reader.pages[-1]
+    box = last_page.mediabox
+    width = float(box.width)
+    height = float(box.height)
+    writer.add_blank_page(width=width, height=height)
+
+    out_path = out_dir / f"{original.stem}__padded_even_pages.pdf"
+    with out_path.open("wb") as f:
+        writer.write(f)
+    return out_path
+
+
+def resolve_printer_name(myprint_module: Any, printer: str) -> Optional[str]:
+    printers = getattr(myprint_module, "PRINTERS", {})
+    return printers.get(printer, printer)
+
+
+def load_print_settings_for_myprint(myprint_module: Any) -> Dict[str, List[str]]:
+    db_path = Path(myprint_module.__file__).with_name("print_settings.json")
+    with db_path.open("r", encoding="utf-8") as f:
+        raw = json.load(f)
+    return {k.lower(): v for k, v in raw.items()}
+
+
+def plan_print360_manual_batch(
+    *,
+    orders: List[Dict[str, str]],
+    start_index: int,
+    start_resume: Optional[Print360Resume],
+    itemid_index: Dict[str, str],
+    pdf_by_normbase: Dict[str, PdfEntry],
+    page_limit: int,
+    temp_dir: Path,
+    padding_executor: ThreadPoolExecutor,
+    padding_futures: Dict[Path, Any],
+    queue_padding: bool = True,
+    inventory: Optional[ManualsInventory] = None,
+    skip_collector: Optional[InventorySkipCollector] = None,
+) -> Tuple[int, int, Optional[Print360Resume], List[Print360ManualTask]]:
+    pages_planned = 0
+    idx = start_index
+    resume: Optional[Print360Resume] = None
+    tasks: List[Print360ManualTask] = []
+
+    while idx < len(orders) and pages_planned < page_limit:
+        row = orders[idx]
+        title = (row.get("title") or "").strip()
+        item_id = order_item_id(row)
+        url = (row.get("item_url") or "").strip()
+
+        if not title or not url:
+            idx += 1
+            start_resume = None
+            continue
+
+        if not item_id or item_id not in itemid_index:
+            print(f"\n[print360manual2sided] SKIP (not in links DB): item_id={item_id!r}  title={title}")
+            idx += 1
+            start_resume = None
+            continue
+
+        pdf_base = itemid_index[item_id]
+        pdf = pdf_by_normbase.get(_norm(pdf_base))
+        if not pdf:
+            print(f"\n[print360manual2sided] SKIP (PDF not found): item_id={item_id}  pdf_base={pdf_base!r}")
+            idx += 1
+            start_resume = None
+            continue
+
+        hits = inventory.lookup_pdf(pdf) if inventory is not None else []
+        if hits:
+            location = inventory_location_summary(hits)
+            print(f"\n[inventory] SKIP printing '{pdf.base}' because it is already in manuals.csv")
+            print(f"[inventory] Location/info: {location}")
+            if skip_collector is not None:
+                skip_collector.add(SkippedInventoryRecord(pdf_base=pdf.base, pdf_path=str(pdf.path), location=location))
+            idx += 1
+            start_resume = None
+            continue
+
+        total_pages = get_pdf_pagecount(pdf.path)
+        if not total_pages or total_pages <= 0:
+            print(f"\n[print360manual2sided] SKIP (cannot read page count): {pdf.path}")
+            idx += 1
+            start_resume = None
+            continue
+
+        padded_pages = total_pages + (total_pages % 2)
+        if queue_padding and padded_pages != total_pages and pdf.path not in padding_futures:
+            print(f"[print360manual2sided] Padding queued in background: {pdf.base} ({total_pages} -> {padded_pages} pages)")
+            padding_futures[pdf.path] = padding_executor.submit(create_padded_pdf, pdf.path, temp_dir)
+
+        start_page = 1
+        if start_resume is not None and start_resume.order_index == idx:
+            start_page = max(1, min(start_resume.next_page, padded_pages + 1))
+
+        if start_page > padded_pages:
+            idx += 1
+            start_resume = None
+            continue
+
+        remaining_capacity = page_limit - pages_planned
+        if remaining_capacity <= 0:
+            break
+
+        remaining_pages = padded_pages - start_page + 1
+        if remaining_pages <= remaining_capacity:
+            end_page = padded_pages
+            next_idx = idx + 1
+            next_resume = None
+        else:
+            end_page = start_page + remaining_capacity - 1
+            if end_page % 2 == 1:
+                end_page -= 1
+            if end_page < start_page:
+                break
+            next_idx = idx
+            next_resume = Print360Resume(order_index=idx, pdf=pdf, total_pages=padded_pages, next_page=end_page + 1)
+
+        pr = f"{start_page}-{end_page}"
+        planned_now = end_page - start_page + 1
+        print(f"\n[print360manual2sided] PLAN: {pdf.base}  pages={pr}  (original={total_pages}, padded={padded_pages})")
+        tasks.append(
+            Print360ManualTask(
+                order_index=idx,
+                pdf=pdf,
+                print_path=pdf.path,
+                original_pages=total_pages,
+                padded_pages=padded_pages,
+                page_range=pr,
+                padded=(padded_pages != total_pages),
+            )
+        )
+        pages_planned += planned_now
+
+        if next_resume is not None:
+            resume = next_resume
+            break
+
+        idx = next_idx
+        start_resume = None
+
+    return idx, pages_planned, resume, tasks
+
+
+def plan_print720_manual_batch(
+    *,
+    orders: List[Dict[str, str]],
+    start_index: int,
+    itemid_index: Dict[str, str],
+    pdf_by_normbase: Dict[str, PdfEntry],
+    page_limit_each: int,
+    temp_dir: Path,
+    padding_executor: ThreadPoolExecutor,
+    padding_futures: Dict[Path, Any],
+    queue_padding: bool = True,
+    inventory: Optional[ManualsInventory] = None,
+    skip_collector: Optional[InventorySkipCollector] = None,
+) -> Tuple[int, List[Print360ManualTask]]:
+    selected: List[Print360ManualTask] = []
+    selected_pages = 0
+    total_limit = page_limit_each * 2
+    idx = start_index
+
+    while idx < len(orders):
+        row = orders[idx]
+        title = (row.get("title") or "").strip()
+        item_id = order_item_id(row)
+        url = (row.get("item_url") or "").strip()
+
+        if not title or not url:
+            idx += 1
+            continue
+
+        if not item_id or item_id not in itemid_index:
+            print(f"\n[print720manual2sided] SKIP (not in links DB): item_id={item_id!r}  title={title}")
+            idx += 1
+            continue
+
+        pdf_base = itemid_index[item_id]
+        pdf = pdf_by_normbase.get(_norm(pdf_base))
+        if not pdf:
+            print(f"\n[print720manual2sided] SKIP (PDF not found): item_id={item_id}  pdf_base={pdf_base!r}")
+            idx += 1
+            continue
+
+        hits = inventory.lookup_pdf(pdf) if inventory is not None else []
+        if hits:
+            location = inventory_location_summary(hits)
+            print(f"\n[inventory] SKIP printing '{pdf.base}' because it is already in manuals.csv")
+            print(f"[inventory] Location/info: {location}")
+            if skip_collector is not None:
+                skip_collector.add(SkippedInventoryRecord(pdf_base=pdf.base, pdf_path=str(pdf.path), location=location))
+            idx += 1
+            continue
+
+        total_pages = get_pdf_pagecount(pdf.path)
+        if not total_pages or total_pages <= 0:
+            print(f"\n[print720manual2sided] SKIP (cannot read page count): {pdf.path}")
+            idx += 1
+            continue
+
+        padded_pages = total_pages + (total_pages % 2)
+        if selected and selected_pages + padded_pages > total_limit:
+            break
+
+        if queue_padding and padded_pages != total_pages and pdf.path not in padding_futures:
+            print(f"[print720manual2sided] Padding queued in background: {pdf.base} ({total_pages} -> {padded_pages} pages)")
+            padding_futures[pdf.path] = padding_executor.submit(create_padded_pdf, pdf.path, temp_dir)
+
+        selected.append(
+            Print360ManualTask(
+                order_index=idx,
+                pdf=pdf,
+                print_path=pdf.path,
+                original_pages=total_pages,
+                padded_pages=padded_pages,
+                page_range=f"1-{padded_pages}",
+                padded=(padded_pages != total_pages),
+            )
+        )
+        selected_pages += padded_pages
+        idx += 1
+
+        if selected_pages >= total_limit:
+            break
+
+    return idx, selected
+
+
+def wait_for_padded_paths(tasks: List[Print360ManualTask], padding_futures: Dict[Path, Any], label: str) -> None:
+    for task in tasks:
+        if not task.padded:
+            continue
+        fut = padding_futures.get(task.pdf.path)
+        if fut is None:
+            continue
+        print(f"[{label}] Waiting for padded PDF: {task.pdf.base}")
+        task.print_path = fut.result()
+
+
+def manual_task_page_count(task: Print360ManualTask) -> int:
+    start_s, end_s = task.page_range.split("-", 1)
+    return max(0, int(end_s) - int(start_s) + 1)
+
+
+def summarize_manual_tasks(label: str, tasks: List[Print360ManualTask], printer_name: Optional[str] = None) -> None:
+    total_pages = sum(manual_task_page_count(t) for t in tasks)
+    first_pass_pages = sum((manual_task_page_count(t) + 1) // 2 for t in tasks)
+    heading = f"\n[{label}] Summary"
+    if printer_name:
+        heading += f" for {printer_name}"
+    print(heading + ":")
+    print(f"  Manuals: {len(tasks)}")
+    print(f"  Total document pages to print: {total_pages}")
+    print(f"  First-pass even/simplex pages: {first_pass_pages}")
+    for task in tasks:
+        start_s, end_s = task.page_range.split("-", 1)
+        includes_padding = task.padded and int(start_s) <= task.padded_pages <= int(end_s)
+        pad_note = " + blank padding page" if includes_padding else ""
+        print(f"  - {task.pdf.base}: {task.page_range} ({manual_task_page_count(task)} pages{pad_note})")
+
+
+def partition_tasks_evenly(tasks: List[Print360ManualTask]) -> Tuple[List[Print360ManualTask], List[Print360ManualTask]]:
+    total = sum(t.padded_pages for t in tasks)
+    best_sum = 0
+    best_mask = 0
+    sums = {0: 0}
+    for i, task in enumerate(tasks):
+        page_count = task.padded_pages
+        additions = {s + page_count: mask | (1 << i) for s, mask in sums.items()}
+        sums.update(additions)
+
+    for s, mask in sums.items():
+        if abs(total - 2 * s) < abs(total - 2 * best_sum) or (
+            abs(total - 2 * s) == abs(total - 2 * best_sum) and s > best_sum
+        ):
+            best_sum = s
+            best_mask = mask
+
+    p1: List[Print360ManualTask] = []
+    p2: List[Print360ManualTask] = []
+    for i, task in enumerate(tasks):
+        if best_mask & (1 << i):
+            p1.append(task)
+        else:
+            p2.append(task)
+    return p1, p2
+
+
+def make_padding_blank_setting(myprint_module: Any, base_setting: str, padded_page: int) -> str:
+    parts = myprint_module.make_simplex_setting(base_setting).split(",")
+    page_idx = myprint_module.extract_page_selector_index(parts)
+    if page_idx is None:
+        insert_at = 1 if parts else 0
+        parts.insert(insert_at, str(padded_page))
+    else:
+        parts[page_idx] = str(padded_page)
+    return ",".join(parts)
+
+
+def pages_from_setting(myprint_module: Any, setting: str, max_page: int) -> List[int]:
+    parts = [p.strip() for p in setting.split(",")]
+    pages: List[int] = []
+    for idx in myprint_module.extract_page_selector_indices(parts):
+        parsed = myprint_module.parse_page_token(parts[idx])
+        if parsed[0] == "single":
+            p = parsed[1]
+            if 1 <= p <= max_page:
+                pages.append(p)
+        elif parsed[0] == "range":
+            a, b = parsed[1], parsed[2]
+            pages.extend(range(max(1, a), min(max_page, b) + 1))
+    return pages
+
+
+def make_batch_pair_setting(myprint_module: Any, setting: str) -> str:
+    parts = []
+    for part in [p.strip() for p in setting.split(",")]:
+        low = part.lower()
+        if low == "simplex":
+            parts.append("duplex")
+        elif low == "simplexshort":
+            parts.append("duplexshort")
+        else:
+            parts.append(part)
+    if not myprint_module.is_duplex_setting(",".join(parts)):
+        parts.append("duplex")
+    return ",".join(parts)
+
+
+def replace_setting_page_tokens(myprint_module: Any, setting: str, replacements: Dict[int, str]) -> str:
+    parts = [p.strip() for p in setting.split(",")]
+    page_indices = myprint_module.extract_page_selector_indices(parts)
+    for idx in page_indices:
+        if idx in replacements:
+            parts[idx] = replacements[idx]
+    return ",".join(parts)
+
+
+def extend_setting_to_page(myprint_module: Any, setting: str, end_page: int) -> str:
+    parts = [p.strip() for p in setting.split(",")]
+    page_indices = myprint_module.extract_page_selector_indices(parts)
+    if not page_indices:
+        parts.insert(1 if parts else 0, str(end_page))
+        return ",".join(parts)
+
+    idx = page_indices[-1]
+    parsed = myprint_module.parse_page_token(parts[idx])
+    if parsed[0] == "range":
+        parts[idx] = f"{parsed[1]}-{end_page}"
+    elif parsed[0] == "single":
+        parts[idx] = f"{parsed[1]}-{end_page}"
+    return ",".join(parts)
+
+
+def prepare_task_for_batch_manual_2sided(
+    *,
+    myprint_module: Any,
+    print_settings: Dict[str, List[str]],
+    task: Print360ManualTask,
+    temp_dir: Path,
+) -> None:
+    original_start_s, original_end_s = task.page_range.split("-", 1)
+    original_start = int(original_start_s)
+    original_end = min(int(original_end_s), task.original_pages)
+
+    default_setting = f"color,1-{task.original_pages},duplex,fit,paper=letter"
+    source_settings = print_settings.get(task.pdf.base.lower(), [default_setting])
+    clipped_settings: List[str] = []
+    for setting in source_settings:
+        clipped = myprint_module.clip_setting_to_custom_range(setting, original_start, original_end)
+        if clipped is not None:
+            clipped_settings.append(clipped)
+
+    simplex_pages = set()
+    for setting in clipped_settings:
+        if not (myprint_module.is_duplex_setting(setting) and myprint_module.setting_needs_manual_2sided(setting)):
+            simplex_pages.update(pages_from_setting(myprint_module, setting, original_end))
+    short_edge = myprint_module.has_short_edge_setting(clipped_settings)
+
+    mapping: Dict[int, int] = {}
+    new_page_no = 1
+    for old_page in range(original_start, original_end + 1):
+        mapping[old_page] = new_page_no
+        new_page_no += 1
+        if old_page in simplex_pages:
+            new_page_no += 1
+
+    new_total = new_page_no - 1
+    needs_final_blank = new_total % 2 == 1
+    if needs_final_blank:
+        new_total += 1
+
+    needs_temp_pdf = (
+        original_start != 1
+        or original_end != task.original_pages
+        or bool(simplex_pages)
+        or needs_final_blank
+        or short_edge
+    )
+
+    if needs_temp_pdf:
+        try:
+            from pypdf import PdfReader, PdfWriter  # type: ignore
+        except Exception:
+            from PyPDF2 import PdfReader, PdfWriter  # type: ignore
+
+        reader = PdfReader(str(task.pdf.path))
+        writer = PdfWriter()
+        output_page_no = 1
+        last_selected_page = None
+        for page_index in range(original_start, original_end + 1):
+            page = reader.pages[page_index - 1]
+            last_selected_page = page
+            if short_edge and output_page_no % 2 == 1:
+                page = myprint_module.rotate_page_180(page)
+            writer.add_page(page)
+            output_page_no += 1
+            if page_index in simplex_pages:
+                box = page.mediabox
+                writer.add_blank_page(width=float(box.width), height=float(box.height))
+                output_page_no += 1
+        if needs_final_blank:
+            blank_source = last_selected_page or reader.pages[original_end - 1]
+            box = blank_source.mediabox
+            writer.add_blank_page(width=float(box.width), height=float(box.height))
+
+        safe_range = task.page_range.replace("-", "_")
+        out_path = temp_dir / f"{task.order_index}_{task.pdf.path.stem}_{safe_range}__batch_manual2sided.pdf"
+        with out_path.open("wb") as f:
+            writer.write(f)
+        task.print_path = out_path
+
+    remapped_settings: List[str] = []
+    for setting in clipped_settings:
+        parts = [p.strip() for p in setting.split(",")]
+        replacements: Dict[int, str] = {}
+        page_indices = myprint_module.extract_page_selector_indices(parts)
+        for idx in page_indices:
+            parsed = myprint_module.parse_page_token(parts[idx])
+            if parsed[0] == "single":
+                p = parsed[1]
+                start = mapping[p]
+                replacements[idx] = f"{start}-{start + 1}" if p in simplex_pages else str(start)
+            elif parsed[0] == "range":
+                a, b = parsed[1], parsed[2]
+                range_pages = list(range(a, b + 1))
+                mapped_start = mapping[a]
+                mapped_end = mapping[b] + (1 if any(p in simplex_pages for p in range_pages) else 0)
+                replacements[idx] = f"{mapped_start}-{mapped_end}"
+
+        remapped = replace_setting_page_tokens(myprint_module, setting, replacements)
+        if any(p in simplex_pages for p in pages_from_setting(myprint_module, setting, original_end)):
+            remapped = make_batch_pair_setting(myprint_module, remapped)
+        remapped_settings.append(remapped)
+
+    if needs_final_blank and remapped_settings:
+        remapped_settings[-1] = make_batch_pair_setting(
+            myprint_module,
+            extend_setting_to_page(myprint_module, remapped_settings[-1], new_total),
+        )
+
+    task.padded_pages = new_total
+    task.page_range = f"1-{new_total}"
+    task.padded = needs_temp_pdf
+    task.effective_settings = remapped_settings
+
+
+def prepare_tasks_for_batch_manual_2sided(
+    *,
+    myprint_module: Any,
+    print_settings: Dict[str, List[str]],
+    tasks: List[Print360ManualTask],
+    temp_dir: Path,
+) -> None:
+    for task in tasks:
+        prepare_task_for_batch_manual_2sided(
+            myprint_module=myprint_module,
+            print_settings=print_settings,
+            task=task,
+            temp_dir=temp_dir,
+        )
+
+
+def settings_for_print360_manual_task(myprint_module: Any, print_settings: Dict[str, List[str]], task: Print360ManualTask) -> List[str]:
+    if task.effective_settings is not None:
+        return list(task.effective_settings)
+
+    default_setting = f"color,1-{task.padded_pages},duplex,fit,paper=letter"
+    settings = print_settings.get(task.pdf.base.lower(), [default_setting])
+    start_s, end_s = task.page_range.split("-", 1)
+    start_page, end_page = int(start_s), int(end_s)
+    effective: List[str] = []
+    for setting in settings:
+        clipped = myprint_module.clip_setting_to_custom_range(setting, start_page, min(end_page, task.original_pages))
+        if clipped is not None:
+            effective.append(clipped)
+
+    if task.padded and start_page <= task.padded_pages <= end_page:
+        base_setting = effective[-1] if effective else settings[-1]
+        effective.append(make_padding_blank_setting(myprint_module, base_setting, task.padded_pages))
+
+    return effective
+
+
+def split_manual_2sided_settings(myprint_module: Any, settings: List[str]) -> Tuple[List[str], List[str], List[str]]:
+    first_pass: List[str] = []
+    second_pass: List[str] = []
+    simplex_only: List[str] = []
+    for setting in settings:
+        if myprint_module.is_duplex_setting(setting) and myprint_module.setting_needs_manual_2sided(setting):
+            first_pass.append(myprint_module.make_manual_2sided_setting(setting, "even"))
+            second_pass.append(myprint_module.make_manual_2sided_setting(setting, "odd"))
+        else:
+            pair_setting = myprint_module.make_batch_pair_setting(setting)
+            first_pass.append(myprint_module.make_manual_2sided_setting(pair_setting, "even"))
+            second_pass.append(myprint_module.make_manual_2sided_setting(pair_setting, "odd"))
+    return first_pass, second_pass, simplex_only
+
+
+def is_padding_blank_setting(myprint_module: Any, task: Print360ManualTask, setting: str) -> bool:
+    parts = [p.strip() for p in setting.split(",")]
+    page_idx = myprint_module.extract_page_selector_index(parts)
+    if page_idx is None:
+        return False
+    parsed = myprint_module.parse_page_token(parts[page_idx])
+    return parsed[0] == "single" and parsed[1] == task.padded_pages and task.padded_pages > task.original_pages
+
+
+def execute_print360_manual_first_pass_batch(
+    *,
+    myprint_module: Any,
+    print_settings: Dict[str, List[str]],
+    tasks: List[Print360ManualTask],
+    printer_name: str,
+    batch_no: int,
+    label: str = "print360manual2sided",
+) -> Tuple[List[Tuple[Print360ManualTask, List[str]]], List[str]]:
+    second_pass_jobs: List[Tuple[Print360ManualTask, List[str]]] = []
+    simplex_pages: List[str] = []
+
+    print(f"\n[{label}] FIRST PASS batch {batch_no} on {printer_name}")
+    for task in tasks:
+        settings = settings_for_print360_manual_task(myprint_module, print_settings, task)
+        first_pass, second_pass, simplex_only = split_manual_2sided_settings(myprint_module, settings)
+        warning_simplex = [s for s in simplex_only if not is_padding_blank_setting(myprint_module, task, s)]
+        if warning_simplex:
+            simplex_pages.append(f"{task.pdf.base}: " + ", ".join(myprint_module.describe_setting_pages(s) for s in warning_simplex))
+        if second_pass:
+            second_pass_jobs.append((task, second_pass))
+        for setting in first_pass:
+            myprint_module.print_one_setting(
+                str(task.print_path),
+                setting,
+                printer_name,
+                batch_size=70,
+                small_range_no_wait_threshold=10,
+                delay_between_batches=60,
+            )
+
+    return second_pass_jobs, simplex_pages
+
+
+def execute_print360_manual_second_pass(
+    *,
+    myprint_module: Any,
+    second_pass_jobs: List[Tuple[Print360ManualTask, List[str]]],
+    simplex_pages: List[str],
+    quiet_printer_name: str,
+    second_pass_only: bool = False,
+) -> None:
+    if not second_pass_jobs:
+        print("\n[print360manual2sided] No second pass is needed.")
+        return
+
+    if second_pass_only:
+        print("\n[print360manual2sided] Second-pass-only mode.")
+        print("Load the paper from the completed even-page first pass.")
+    else:
+        print("\n[print360manual2sided] First pass complete.")
+        print("Put the paper back in the tray: even pages face up, top of the paper down.")
+    if simplex_pages:
+        print("Do NOT put back these real one-sided pages:")
+        for item in simplex_pages:
+            print(f"  {item}")
+
+    print(f"\n[print360manual2sided] Second pass commands that will be used on {quiet_printer_name}:")
+    for task, settings in second_pass_jobs:
+        myprint_module.display_sumatra_commands_for_settings(str(task.print_path), settings, quiet_printer_name, batch_size=70)
+
+    input(f"Press Enter when {quiet_printer_name} is loaded and ready for the odd-page second pass...")
+    if not myprint_module.countdown_allow_cancel(15):
+        return
+
+    print(f"\n[print360manual2sided] SECOND PASS on {quiet_printer_name}")
+    for task, settings in second_pass_jobs:
+        for setting in settings:
+            myprint_module.print_one_setting(
+                str(task.print_path),
+                setting,
+                quiet_printer_name,
+                batch_size=70,
+                small_range_no_wait_threshold=10,
+                delay_between_batches=90,
+            )
+
+
+def execute_print720_manual_first_pass_pair(
+    *,
+    myprint_module: Any,
+    print_settings: Dict[str, List[str]],
+    tasks_p1: List[Print360ManualTask],
+    tasks_p2: List[Print360ManualTask],
+    printer1_name: str,
+    printer2_name: str,
+    batch_no: int,
+) -> Tuple[List[Tuple[str, Print360ManualTask, List[str]]], List[str]]:
+    second_pass_jobs: List[Tuple[str, Print360ManualTask, List[str]]] = []
+    simplex_pages: List[str] = []
+
+    def run_one(printer_name: str, tasks: List[Print360ManualTask], tag: str):
+        jobs, simplex = execute_print360_manual_first_pass_batch(
+            myprint_module=myprint_module,
+            print_settings=print_settings,
+            tasks=tasks,
+            printer_name=printer_name,
+            batch_no=batch_no,
+            label="print720manual2sided",
+        )
+        return tag, jobs, simplex
+
+    if tasks_p1 and tasks_p2:
+        print(f"\n[print720manual2sided] FIRST PASS batch {batch_no} concerns both printers:")
+        print(f"  Printer 1: {printer1_name}")
+        print(f"  Printer 2: {printer2_name}")
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            futs = [
+                ex.submit(run_one, printer1_name, tasks_p1, "p1"),
+                ex.submit(run_one, printer2_name, tasks_p2, "p2"),
+            ]
+            for fut in as_completed(futs):
+                tag, jobs, simplex = fut.result()
+                quiet_tag = "p1" if tag == "p1" else "p2"
+                for task, settings in jobs:
+                    second_pass_jobs.append((quiet_tag, task, settings))
+                simplex_pages.extend(simplex)
+        return second_pass_jobs, simplex_pages
+
+    if tasks_p1:
+        print(f"\n[print720manual2sided] FIRST PASS batch {batch_no} concerns printer: {printer1_name}")
+        jobs, simplex = execute_print360_manual_first_pass_batch(
+            myprint_module=myprint_module,
+            print_settings=print_settings,
+            tasks=tasks_p1,
+            printer_name=printer1_name,
+            batch_no=batch_no,
+            label="print720manual2sided",
+        )
+        second_pass_jobs.extend(("p1", task, settings) for task, settings in jobs)
+        simplex_pages.extend(simplex)
+        return second_pass_jobs, simplex_pages
+
+    if tasks_p2:
+        print(f"\n[print720manual2sided] FIRST PASS batch {batch_no} concerns printer: {printer2_name}")
+        jobs, simplex = execute_print360_manual_first_pass_batch(
+            myprint_module=myprint_module,
+            print_settings=print_settings,
+            tasks=tasks_p2,
+            printer_name=printer2_name,
+            batch_no=batch_no,
+            label="print720manual2sided",
+        )
+        second_pass_jobs.extend(("p2", task, settings) for task, settings in jobs)
+        simplex_pages.extend(simplex)
+    return second_pass_jobs, simplex_pages
+
+
+def collect_print720_manual_second_pass_jobs(
+    *,
+    myprint_module: Any,
+    print_settings: Dict[str, List[str]],
+    tasks_p1: List[Print360ManualTask],
+    tasks_p2: List[Print360ManualTask],
+) -> Tuple[List[Tuple[str, Print360ManualTask, List[str]]], List[str]]:
+    second_pass_jobs: List[Tuple[str, Print360ManualTask, List[str]]] = []
+    simplex_pages: List[str] = []
+
+    jobs1, simplex1 = collect_print360_manual_second_pass_jobs(
+        myprint_module=myprint_module,
+        print_settings=print_settings,
+        tasks=tasks_p1,
+    )
+    jobs2, simplex2 = collect_print360_manual_second_pass_jobs(
+        myprint_module=myprint_module,
+        print_settings=print_settings,
+        tasks=tasks_p2,
+    )
+    second_pass_jobs.extend(("p1", task, settings) for task, settings in jobs1)
+    second_pass_jobs.extend(("p2", task, settings) for task, settings in jobs2)
+    simplex_pages.extend(simplex1)
+    simplex_pages.extend(simplex2)
+    return second_pass_jobs, simplex_pages
+
+
+def collect_print360_manual_second_pass_jobs(
+    *,
+    myprint_module: Any,
+    print_settings: Dict[str, List[str]],
+    tasks: List[Print360ManualTask],
+) -> Tuple[List[Tuple[Print360ManualTask, List[str]]], List[str]]:
+    second_pass_jobs: List[Tuple[Print360ManualTask, List[str]]] = []
+    simplex_pages: List[str] = []
+
+    for task in tasks:
+        settings = settings_for_print360_manual_task(myprint_module, print_settings, task)
+        _, second_pass, simplex_only = split_manual_2sided_settings(myprint_module, settings)
+        warning_simplex = [s for s in simplex_only if not is_padding_blank_setting(myprint_module, task, s)]
+        if warning_simplex:
+            simplex_pages.append(f"{task.pdf.base}: " + ", ".join(myprint_module.describe_setting_pages(s) for s in warning_simplex))
+        if second_pass:
+            second_pass_jobs.append((task, second_pass))
+
+    return second_pass_jobs, simplex_pages
+
+
+def print360_jobs_have_short_edge(myprint_module: Any, jobs: List[Tuple[Print360ManualTask, List[str]]]) -> bool:
+    for task, settings in jobs:
+        if myprint_module.has_short_edge_setting(settings):
+            return True
+        if task.effective_settings is not None and myprint_module.has_short_edge_setting(task.effective_settings):
+            return True
+    return False
+
+
+def print720_jobs_have_short_edge(myprint_module: Any, jobs: List[Tuple[str, Print360ManualTask, List[str]]]) -> bool:
+    for _, task, settings in jobs:
+        if myprint_module.has_short_edge_setting(settings):
+            return True
+        if task.effective_settings is not None and myprint_module.has_short_edge_setting(task.effective_settings):
+            return True
+    return False
+
+
+def execute_print720_manual_second_pass(
+    *,
+    myprint_module: Any,
+    second_pass_jobs: List[Tuple[str, Print360ManualTask, List[str]]],
+    simplex_pages: List[str],
+    quiet_printer1_name: str,
+    quiet_printer2_name: str,
+    second_pass_only: bool = False,
+) -> None:
+    if not second_pass_jobs:
+        print("\n[print720manual2sided] No second pass is needed.")
+        return
+
+    has_p1 = any(tag == "p1" for tag, _, _ in second_pass_jobs)
+    has_p2 = any(tag == "p2" for tag, _, _ in second_pass_jobs)
+    if has_p1 and has_p2:
+        if second_pass_only:
+            print("\n[print720manual2sided] Second-pass-only mode for both printers.")
+            print(f"Load paper from the completed even-page first pass into: {quiet_printer1_name} and {quiet_printer2_name}.")
+        else:
+            print("\n[print720manual2sided] First pass complete for both printers.")
+            print(f"Reload paper for both second-pass printers: {quiet_printer1_name} and {quiet_printer2_name}.")
+    elif has_p1:
+        if second_pass_only:
+            print(f"\n[print720manual2sided] Second-pass-only mode for printer: {quiet_printer1_name}")
+            print(f"Load paper from the completed even-page first pass into: {quiet_printer1_name}.")
+        else:
+            print(f"\n[print720manual2sided] First pass complete for printer: {quiet_printer1_name}")
+            print(f"Reload paper for second-pass printer: {quiet_printer1_name}.")
+    else:
+        if second_pass_only:
+            print(f"\n[print720manual2sided] Second-pass-only mode for printer: {quiet_printer2_name}")
+            print(f"Load paper from the completed even-page first pass into: {quiet_printer2_name}.")
+        else:
+            print(f"\n[print720manual2sided] First pass complete for printer: {quiet_printer2_name}")
+            print(f"Reload paper for second-pass printer: {quiet_printer2_name}.")
+    if not second_pass_only:
+        print("Put the paper back in the tray: even pages face up, top of the paper down.")
+
+    if simplex_pages:
+        print("Do NOT put back these real one-sided pages:")
+        for item in simplex_pages:
+            print(f"  {item}")
+
+    print("\n[print720manual2sided] Second pass commands that will be used:")
+    for tag, task, settings in second_pass_jobs:
+        quiet_name = quiet_printer1_name if tag == "p1" else quiet_printer2_name
+        print(f"\nFor printer: {quiet_name}")
+        myprint_module.display_sumatra_commands_for_settings(str(task.print_path), settings, quiet_name, batch_size=70)
+
+    if has_p1 and has_p2:
+        ready_target = f"{quiet_printer1_name} and {quiet_printer2_name} are loaded"
+    elif has_p1:
+        ready_target = f"{quiet_printer1_name} is loaded"
+    else:
+        ready_target = f"{quiet_printer2_name} is loaded"
+    input(f"Press Enter when {ready_target} and ready for the odd-page second pass...")
+    if not myprint_module.countdown_allow_cancel(15):
+        return
+
+    def run_jobs(tag: str, printer_name: str):
+        for job_tag, task, settings in second_pass_jobs:
+            if job_tag != tag:
+                continue
+            for setting in settings:
+                myprint_module.print_one_setting(
+                    str(task.print_path),
+                    setting,
+                    printer_name,
+                    batch_size=70,
+                    small_range_no_wait_threshold=10,
+                    delay_between_batches=90,
+                )
+
+    if has_p1 and has_p2:
+        print(f"\n[print720manual2sided] SECOND PASS concerns both printers: {quiet_printer1_name} and {quiet_printer2_name}")
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            futs = [ex.submit(run_jobs, "p1", quiet_printer1_name), ex.submit(run_jobs, "p2", quiet_printer2_name)]
+            for fut in as_completed(futs):
+                fut.result()
+    elif has_p1:
+        print(f"\n[print720manual2sided] SECOND PASS concerns printer: {quiet_printer1_name}")
+        run_jobs("p1", quiet_printer1_name)
+    else:
+        print(f"\n[print720manual2sided] SECOND PASS concerns printer: {quiet_printer2_name}")
+        run_jobs("p2", quiet_printer2_name)
 
 
 def run_print360_batch(
@@ -1222,8 +2089,14 @@ def main():
 
     ap.add_argument("--print360", action="store_true",
                     help="Special mode: print up to 360 pages with no user intervention (except choosing printer).")
+    ap.add_argument("--print360manual2sided", action="store_true",
+                    help="Special mode: print360-style batches using manual two-sided even/odd passes and padded odd-page PDFs.")
     ap.add_argument("--print720", action="store_true",
                     help="Special mode: dry-run split then print ~360 pages on printer1 and ~360 on printer2 concurrently.")
+    ap.add_argument("--print720manual2sided", action="store_true",
+                    help="Special mode: print720-style manual two-sided batches, assigning whole manuals evenly across two printers.")
+    ap.add_argument("--secondpass", action="store_true",
+                    help="With --print360manual2sided or --print720manual2sided, run only the odd-page second pass.")
     ap.add_argument(
         "--print720-state",
         type=Path,
@@ -1294,6 +2167,274 @@ def main():
     default_printer = (args.printer or "").strip()
 
     try:
+        if args.print360manual2sided:
+            if not default_printer:
+                default_printer = input("\n[print360manual2sided] Printer number (e.g. 1 or 2): ").strip()
+            if not default_printer:
+                print("[print360manual2sided] ERROR: printer is required.")
+                sys.exit(2)
+
+            myprint_module = load_myprint_module(args.myprint)
+            printer_name = resolve_printer_name(myprint_module, default_printer)
+            if not printer_name:
+                print(f"[print360manual2sided] ERROR: unknown printer {default_printer!r}")
+                sys.exit(2)
+            quiet_printer_name = f"{printer_name} Quiet"
+            if not myprint_module.printer_exists(quiet_printer_name):
+                print("\n[print360manual2sided] Manual two-sided mode requires a quiet printer named:")
+                print(quiet_printer_name)
+                print("No matching quiet printer was found, so the first pass will not start.")
+                save_links_json(args.out_links_json, links)
+                return
+
+            print_settings = load_print_settings_for_myprint(myprint_module)
+            next_idx = 0
+            resume: Optional[Print360Resume] = None
+            batch_no = 1
+            all_second_pass_jobs: List[Tuple[Print360ManualTask, List[str]]] = []
+            all_simplex_pages: List[str] = []
+            printed_any = False
+
+            with tempfile.TemporaryDirectory(prefix="print360manual2sided_") as td:
+                temp_dir = Path(td)
+                padding_futures: Dict[Path, Any] = {}
+                with ThreadPoolExecutor(max_workers=2) as padding_executor:
+                    while True:
+                        next_idx, pages_planned, resume, tasks = plan_print360_manual_batch(
+                            orders=orders,
+                            start_index=next_idx,
+                            start_resume=resume,
+                            itemid_index=itemid_index,
+                            pdf_by_normbase=pdf_by_normbase,
+                            page_limit=360,
+                            temp_dir=temp_dir,
+                            padding_executor=padding_executor,
+                            padding_futures=padding_futures,
+                            queue_padding=False,
+                            inventory=inventory,
+                            skip_collector=skip_collector,
+                        )
+
+                        if not tasks:
+                            if not printed_any:
+                                print("\n[print360manual2sided] Nothing eligible to print. Exiting.")
+                            else:
+                                print("\n[print360manual2sided] No more eligible orders/pages after this batch.")
+                            break
+
+                        prepare_tasks_for_batch_manual_2sided(
+                            myprint_module=myprint_module,
+                            print_settings=print_settings,
+                            tasks=tasks,
+                            temp_dir=temp_dir,
+                        )
+                        pass_label = "Second-pass" if args.secondpass else "First-pass"
+                        actual_pages = sum(manual_task_page_count(t) for t in tasks)
+                        print(f"\n[print360manual2sided] {pass_label} batch {batch_no} prepared: {actual_pages} pages (planned before blank backs: {pages_planned}/360)")
+                        summarize_manual_tasks("print360manual2sided", tasks, printer_name)
+                        if args.secondpass:
+                            second_jobs, simplex_pages = collect_print360_manual_second_pass_jobs(
+                                myprint_module=myprint_module,
+                                print_settings=print_settings,
+                                tasks=tasks,
+                            )
+                        else:
+                            second_jobs, simplex_pages = execute_print360_manual_first_pass_batch(
+                                myprint_module=myprint_module,
+                                print_settings=print_settings,
+                                tasks=tasks,
+                                printer_name=printer_name,
+                                batch_no=batch_no,
+                            )
+                        all_second_pass_jobs.extend(second_jobs)
+                        all_simplex_pages.extend(simplex_pages)
+                        printed_any = True
+
+                        has_more_orders = (resume is not None) or (next_idx < len(orders))
+                        if not has_more_orders:
+                            break
+
+                        if args.secondpass:
+                            prompt = (
+                                f"\n[print360manual2sided] Second-pass batch {batch_no} is planned for printer: {printer_name}. "
+                                "Add the second-pass batch before starting odd-page printing? [y/N]: "
+                            )
+                        else:
+                            prompt = (
+                                f"\n[print360manual2sided] First-pass batch complete for printer: {printer_name}. "
+                                "Add the next first-pass batch before printing? [y/N]: "
+                            )
+                        ans = input(prompt).strip().lower()
+                        if not ans.startswith("y"):
+                            print(f"[print360manual2sided] Using the planned {pass_label.lower()} batches.")
+                            if resume is not None:
+                                print(
+                                    f"[print360manual2sided] Next run should resume order index {resume.order_index}, "
+                                    f"manual '{resume.pdf.base}', page {resume.next_page}."
+                                )
+                            break
+
+                        batch_no += 1
+
+                    if printed_any:
+                        execute_print360_manual_second_pass(
+                            myprint_module=myprint_module,
+                            second_pass_jobs=all_second_pass_jobs,
+                            simplex_pages=all_simplex_pages,
+                            quiet_printer_name=quiet_printer_name,
+                            second_pass_only=args.secondpass,
+                        )
+
+            save_links_json(args.out_links_json, links)
+            return
+
+        if args.print720manual2sided:
+            printer1 = default_printer
+            printer2 = (args.printer2 or "").strip()
+
+            if not printer1:
+                printer1 = input("\n[print720manual2sided] Printer 1 number (e.g. 1): ").strip()
+            if not printer2:
+                printer2 = input("[print720manual2sided] Printer 2 number (e.g. 2): ").strip()
+            if not printer1:
+                print("[print720manual2sided] ERROR: printer1 is required.")
+                sys.exit(2)
+            if not printer2:
+                print("[print720manual2sided] ERROR: printer2 is required.")
+                sys.exit(2)
+
+            myprint_module = load_myprint_module(args.myprint)
+            printer1_name = resolve_printer_name(myprint_module, printer1)
+            printer2_name = resolve_printer_name(myprint_module, printer2)
+            if not printer1_name or not printer2_name:
+                print("[print720manual2sided] ERROR: unknown printer selection.")
+                sys.exit(2)
+
+            quiet_printer1_name = f"{printer1_name} Quiet"
+            quiet_printer2_name = f"{printer2_name} Quiet"
+            missing_quiet = [p for p in (quiet_printer1_name, quiet_printer2_name) if not myprint_module.printer_exists(p)]
+            if missing_quiet:
+                print("\n[print720manual2sided] Manual two-sided mode requires these quiet printers:")
+                print(quiet_printer1_name)
+                print(quiet_printer2_name)
+                print("Missing quiet printer(s):")
+                for p in missing_quiet:
+                    print(p)
+                print("Printing will not start.")
+                save_links_json(args.out_links_json, links)
+                return
+
+            print_settings = load_print_settings_for_myprint(myprint_module)
+            next_idx = 0
+            batch_no = 1
+            all_second_pass_jobs: List[Tuple[str, Print360ManualTask, List[str]]] = []
+            all_simplex_pages: List[str] = []
+            printed_any = False
+
+            with tempfile.TemporaryDirectory(prefix="print720manual2sided_") as td:
+                temp_dir = Path(td)
+                padding_futures: Dict[Path, Any] = {}
+                with ThreadPoolExecutor(max_workers=2) as padding_executor:
+                    while True:
+                        next_idx, selected_tasks = plan_print720_manual_batch(
+                            orders=orders,
+                            start_index=next_idx,
+                            itemid_index=itemid_index,
+                            pdf_by_normbase=pdf_by_normbase,
+                            page_limit_each=360,
+                            temp_dir=temp_dir,
+                            padding_executor=padding_executor,
+                            padding_futures=padding_futures,
+                            queue_padding=False,
+                            inventory=inventory,
+                            skip_collector=skip_collector,
+                        )
+
+                        if not selected_tasks:
+                            if not printed_any:
+                                print("\n[print720manual2sided] Nothing eligible to print. Exiting.")
+                            else:
+                                print("\n[print720manual2sided] No more eligible orders/pages after this batch.")
+                            break
+
+                        prepare_tasks_for_batch_manual_2sided(
+                            myprint_module=myprint_module,
+                            print_settings=print_settings,
+                            tasks=selected_tasks,
+                            temp_dir=temp_dir,
+                        )
+                        tasks_p1, tasks_p2 = partition_tasks_evenly(selected_tasks)
+
+                        pass_label = "Second-pass" if args.secondpass else "First-pass"
+                        print(f"\n[print720manual2sided] Batch {batch_no} assignment summary before {pass_label.lower()} printing:")
+                        summarize_manual_tasks("print720manual2sided", tasks_p1, printer1_name)
+                        summarize_manual_tasks("print720manual2sided", tasks_p2, printer2_name)
+                        print(
+                            f"[print720manual2sided] Batch {batch_no} total pages: "
+                            f"{sum(t.padded_pages for t in selected_tasks)}"
+                        )
+
+                        if args.secondpass:
+                            second_jobs, simplex_pages = collect_print720_manual_second_pass_jobs(
+                                myprint_module=myprint_module,
+                                print_settings=print_settings,
+                                tasks_p1=tasks_p1,
+                                tasks_p2=tasks_p2,
+                            )
+                        else:
+                            second_jobs, simplex_pages = execute_print720_manual_first_pass_pair(
+                                myprint_module=myprint_module,
+                                print_settings=print_settings,
+                                tasks_p1=tasks_p1,
+                                tasks_p2=tasks_p2,
+                                printer1_name=printer1_name,
+                                printer2_name=printer2_name,
+                                batch_no=batch_no,
+                            )
+                        all_second_pass_jobs.extend(second_jobs)
+                        all_simplex_pages.extend(simplex_pages)
+                        printed_any = True
+
+                        has_more_orders = next_idx < len(orders)
+                        if not has_more_orders:
+                            break
+
+                        if tasks_p1 and tasks_p2:
+                            concern = f"both printers: {printer1_name} and {printer2_name}"
+                        elif tasks_p1:
+                            concern = f"printer: {printer1_name}"
+                        else:
+                            concern = f"printer: {printer2_name}"
+                        if args.secondpass:
+                            prompt = (
+                                f"\n[print720manual2sided] Second-pass batch {batch_no} is planned for {concern}. "
+                                "Add the second-pass batch before starting odd-page printing? [y/N]: "
+                            )
+                        else:
+                            prompt = (
+                                f"\n[print720manual2sided] First-pass batch complete for {concern}. "
+                                "Add the next first-pass batch before printing? [y/N]: "
+                            )
+                        ans = input(prompt).strip().lower()
+                        if not ans.startswith("y"):
+                            print(f"[print720manual2sided] Using the planned {pass_label.lower()} batches.")
+                            break
+
+                        batch_no += 1
+
+                    if printed_any:
+                        execute_print720_manual_second_pass(
+                            myprint_module=myprint_module,
+                            second_pass_jobs=all_second_pass_jobs,
+                            simplex_pages=all_simplex_pages,
+                            quiet_printer1_name=quiet_printer1_name,
+                            quiet_printer2_name=quiet_printer2_name,
+                            second_pass_only=args.secondpass,
+                        )
+
+            save_links_json(args.out_links_json, links)
+            return
+
         if args.print720:
             printer1 = default_printer
             printer2 = (args.printer2 or "").strip()
