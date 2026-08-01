@@ -27,7 +27,7 @@ ALL_ORDERS_URL = "https://www.ebay.com/sh/ord/?filter=status:ALL_ORDERS"
 RE_ORDER_FULL = re.compile(r"^\d{2}-\d{5}-\d{5}$")   # e.g. 27-13984-70927
 RE_AVAILABLE = re.compile(r"\((\d+)\s+available\)", re.IGNORECASE)
 RE_PRICE = re.compile(r"\$?\s*([0-9]+(?:\.[0-9]{2})?)")
-RE_MANUAL = re.compile(r"\b(manual|guide|handbook)\b", re.IGNORECASE)
+RE_MANUAL = re.compile(r"\b(manuals?|guides?|handbooks?)\b", re.IGNORECASE)
 
 try:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
@@ -42,9 +42,14 @@ class AccountSpec:
     profile_dir: Path
 
 
-def ensure_logged_in_or_pause(driver):
+def ensure_logged_in_or_pause(driver, headless: bool):
     cur = (driver.current_url or "").lower()
     if "signin" in cur or "login" in cur:
+        if headless:
+            raise RuntimeError(
+                "Redirected to eBay sign-in while running headless. "
+                "Run without --headless to log in to this Selenium profile, then retry."
+            )
         print("Redirected to sign-in. Please log in in the Chrome window, then press Enter here.")
         input()
 
@@ -474,7 +479,7 @@ def scrape_account(account: AccountSpec, url: str, args) -> list[dict]:
             print(f"\n=== Account: {account.name} | Profile: {account.profile_dir} ===")
 
         driver.get(url)
-        ensure_logged_in_or_pause(driver)
+        ensure_logged_in_or_pause(driver, headless=args.headless)
         driver.get(url)
 
         rows = scrape_orders(driver, timeout=args.timeout, max_items=args.max_items, debug=args.debug)
@@ -515,7 +520,7 @@ def main():
                     help="Optional path to Chrome/Chromium binary.")
 
     ap.add_argument("--no-manual-filter", action="store_true",
-                    help="Disable the default filter that keeps only items with 'manual|guide|handbook' in the title.")
+                    help="Disable the default filter that keeps only items with 'manual(s)|guide(s)|handbook(s)' in the title.")
 
     ap.add_argument("--no-kill-profile", action="store_true",
                     help="Do NOT kill stale Chrome processes using the same Selenium profile(s) before starting.")
@@ -592,7 +597,7 @@ def main():
     print(f"Rows kept: {len(combined_rows)}")
 
     if not args.no_manual_filter:
-        print("Filter applied: title contains 'manual' or 'guide' or 'handbook' (case-insensitive).")
+        print("Filter applied: title contains 'manual(s)' or 'guide(s)' or 'handbook(s)' (case-insensitive).")
     else:
         print("Filter disabled: keeping all titles.")
 

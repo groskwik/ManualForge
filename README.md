@@ -15,7 +15,7 @@
 It provides a single interface to:
 
 - Preview PDF covers  [cover.py](https://github.com/groskwik/cover)
-- Extract first pages  
+- Extract and preview selected pages
 - Generate high‑resolution PNG previews  
 - Create 2‑up / 4‑up printable PDFs  
 - Manage custom printing presets  
@@ -30,9 +30,9 @@ Built with **Python**, **PySimpleGUI**, **PyMuPDF**, **Pillow**, and **pypdf**.
 ## ✨ Features
 
 ### 📄 PDF Preview & Cover Extraction
-- Instant first‑page rendering  
+- Instant selected-page rendering
 - Adjustable zoom ratio  
-- “Save Image” button exports JPG/PNG  
+- “Save Image” button exports JPG
 - Automatic file naming
 
 ### 🧰 Layout Tools (2‑up / 4‑up)
@@ -77,10 +77,42 @@ Brother HL-L8360CDW Series 2
 Brother HL-L8360CDW Series 2 Quiet
 ```
 
+### 🛒 eBay Automation
+
+`ebay_scrape.py` reads awaiting-shipment orders from both configured eBay accounts by default. It keeps each account's login in a separate Selenium profile next to the script:
+
+Install its Python dependencies with `pip install selenium psutil`.
+
+- Primary: `chrome_profile_selenium`
+- Secondary: `chrome_profile_selenium_2`
+
+Before using headless mode, initialize each profile with a visible browser and complete the eBay login:
+
+```powershell
+python ebay_scrape.py --account primary --stdout-short
+python ebay_scrape.py --account secondary --stdout-short
+```
+
+After both accounts are authenticated, run both headlessly:
+
+```powershell
+python ebay_scrape.py --account both --headless --stdout-short
+```
+
+The scraper writes `awaiting_shipment_items.csv`, keeps only titles containing `manual`, `guide`, or `handbook` (including plurals) unless `--no-manual-filter` is supplied, and expands multi-quantity orders into one row per copy.
+
+`restock.py` changes listings whose Restock dialog reports an available quantity of `0` or blank to `1`. Start with a dry run:
+
+```powershell
+python restock.py --dry-run --show-window
+```
+
+Then run `python restock.py` to update listings. It shares the primary eBay profile and normally closes Chrome processes using that profile before it starts. Do not run it alongside another task using the primary profile. It is non-headless and hidden/minimized by default; use `--show-window` to watch it. Useful options include `--max-items`, `--profile-dir`, and `--no-kill-profile`.
+
 ### 🔍 Fast PDF Search
 - Partial match search  
 - Case‑insensitive  
-- Auto‑selects closest match  
+- Shows matching files for selection
 
 ---
 
@@ -89,14 +121,15 @@ Brother HL-L8360CDW Series 2 Quiet
 ```
 ManualForge/
 │
-├── manualforge.py        # Main GUI
+├── ManualForge.py        # Main GUI
 ├── cover.py              # Cover extraction
-├── nup_pdf.py            # 2-up / 4-up generator
+├── 2up.py                # 2-up / 4-up generator
 ├── pdf2png.py            # PDF → PNG high‑res converter
-├── listpdf.py            # Printer presets
-├── assets/
-│   ├── logo.png
-│   ├── icons/
+├── myprint.py            # Interactive PDF printing
+├── manage_print_settings.py
+├── ebay_scrape.py        # Awaiting-shipment order scraper
+├── ebay_linker.py        # Order-to-PDF linking and batch printing
+├── restock.py            # Restock zero-quantity listings
 │
 └── README.md
 ```

@@ -10,7 +10,6 @@ Baby Lock blsa3-sewing,BOX 3,0
 Bernina 790 Plus,BOX 2,0
 Baby Lock Aria qrg,,1
 Blackmagic Studio Camera 4k,,1
-Boss DR-880,,1
 Brother Innov-is XP2 Embroidery,BOX 2,0
 Brother Innov-is XP2 Embroidery design Guide,BOX 2,1
 Brother Innov-is xp3 embrodery design guide,BOX 1,0
@@ -27,18 +26,17 @@ HP 2404A HP IL interface HP 71B,BOX 1,0
 HP 35S Quick Start Guide,BOX 1,0
 hp41c41cv-ohpg-en,BOX 2,0
 hp45-oh-en,,1
-hp48g-aur-en,BOX 1,0
 HP 50g advanced user's reference manual,BOX 2,1
 hp6797-pac-civileng-en,BOX 2,0
 hp6797-pac-eleceng-en,BOX 3,0
 hp71-basic-easy-en,BOX 3,0
-HP 71 Owner Manual,BOX 3,0
-HP 71 Reference Manual,BOX 3,0
+hp71-rm-en,BOX 3,0
+hp71-rm-en,BOX 1,0
 HP 71B Forth Assembler,BOX 3,0
 75Forth,BOX 1,0
-HP 75 Owner Manual,BOX 1,1
-HP 75 Reference Manual,BOX 1,0
-HP 75 reference manual,BOX 3,0
+hp75-om-en,BOX 1,1
+hp75-rm-en,BOX 1,0
+hp75-rm-en,BOX 3,0
 hp82104a-oh-en,BOX 1,0
 Lowrance Hook 2 Series,BOX 1,0
 Nikon D3500 reference,BOX 2,0
@@ -46,13 +44,10 @@ Nikon Coolpix P950,BOX 3,0
 Nikon Coolpix P950 reference manual,BOX 1,0
 Nikon D5,BOX 2,0
 Nikon D50,,1
-Nikon D7200,BOX 1,0
 Nikon Z7 Z6 Reference Manual,BOX 1,0
-Panasonic DC-ZS70,BOX 3,0
 PFAFF creative Icon,BOX 1,0
 Sony DSC-H300,BOX 2,0
 Tektronix MSO22,BOX 2,0
-Yamaha DGX-670,BOX 2,0
 Owners Manual for GoPro Hero 13 Black Camera - Half-Letter Size,BOXL,0
 wp34s-om-en,BOX 3,0
 Yamaha DGX-660,BOX 3,0
@@ -69,11 +64,27 @@ Canon PowerShot SX740 HS,BOX 4,0
 Tektronix 475,BOX 4,0
 Icom IC-706MKIIG Instruction,BOX 4,0
 hp20b-ug-en,BOX 4,0
-TI Nspire CXII CAS Guidebook,BOX 4,0
 Canon Powershot SX50 HS,BOX 4,0
 Sony NEX-FS700,BOX 4,0
-Brother PE Design 11,BOX 4,0
 Rotax Racing Kart Operator manual for 125 Senior Junior Max Mini Micro,BOX 4,0
-Pfaff 260 Service Manual,BOX 4,0
-hp71-oh-en,BOX 4,0
-hp71-rm-en,BOX 4,0
+Pfaff 260 Service Manual,BOX 1,0
+hp71-om-en,BOX 3,0
+Canon EOS R6  Mark III,BOX 4,0
+Nikon D3200 reference,BOX 4,0
+PFAFF Expression Line,BOX 4,0
+Kodak PixPro FZ55,BOX 4,0
+Icom IC-7300 Basic,BOX 4,0
+ICOM IC-7100 Advanced Instruction Manual,BOX 4,0
+HP86,BOX 4,0
+hp82211a-om-en,BOX 4,0
+Sony FDR-AX53,BOX 4,0
+Icom IC-705 Basic,BOX 4,0
+Nikon D3200 reference,BOX 4,0
+Pioneer DVL-909,BOX 4,0
+hp48gx-graphics,BOX 4,0
+Canon Powershot SX610 HS,BOX 4,0
+PFAFF creative Icon 2,BOX 4,0
+Sony DSC RX10M4 Full,BOX 4, 0
+Canon Powershot SX720,BOX 5, 0
+Fujifilm X-T50,BOX 5, 0
+hp35s-ug-en,BOX 5, 0

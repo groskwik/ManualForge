@@ -153,7 +153,11 @@ def restock_all_zero_to_one(driver, timeout=30, max_items=200, dry_run=False, de
         except StaleElementReferenceException:
             buttons = []
 
-        buttons = [b for b in buttons if b.is_displayed() and b.is_enabled()]
+        try:
+            buttons = [b for b in buttons if b.is_displayed() and b.is_enabled()]
+        except StaleElementReferenceException:
+            # eBay refreshed the listing while Selenium inspected the buttons.
+            continue
 
         if not buttons:
             if debug:

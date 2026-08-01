@@ -1,20 +1,20 @@
 # MyPrint — Intelligent PDF Printing Utility
 
 MyPrint is a Python-based command-line tool designed to streamline the printing of manuals, sewing machine guides, camera documentation, and other large PDF files.  
-It features fuzzy searching, automated print presets, JSON-based settings management, and robust SumatraPDF integration.
+It features filename substring searching, automated print presets, JSON-based settings management, and SumatraPDF integration.
 
-A companion tool, **`manage_print_settings.py`**, allows easy editing of the print settings database with fuzzy search support.
+A companion tool, **`manage_print_settings.py`**, allows easy editing of the print settings database with the same filename substring search.
 
 ---
 
 ## ✨ Features
 
-### 🔍 Smart Fuzzy PDF Search
-Enter part of a filename — MyPrint uses fuzzy matching to locate the intended PDF across multiple folders:
+### 🔍 PDF Filename Search
+Enter part of a filename — MyPrint finds PDFs whose filenames contain that text across the configured folders:
 
 - Case-insensitive  
-- Handles typos and partial names  
-- Shows a ranked match list with numeric selection  
+- Supports partial names
+- Shows matching files with numeric selection when needed
 
 ### 🖨 Printer Selection
 Choose a printer at runtime from a predefined list or automatically fall back to a default printer.
@@ -97,7 +97,7 @@ MyPrint uses PyPDF2 to read:
 - **Python packages:**
 
 ```
-pip install PyPDF2 rapidfuzz
+pip install PyPDF2 psutil
 ```
 
 ---
@@ -112,7 +112,7 @@ SUMATRA_PATH = r"C:\path\to\sumatrapdf.exe"
 ```
 
 ### 2. Configure your PDF folders
-MyPrint recursively scans these directories:
+MyPrint scans the top level of these directories (not subfolders):
 
 ```python
 PDF_FOLDERS = [
@@ -191,7 +191,7 @@ python myprint.py -secondpass
 
 2. **Search for a PDF**  
    Enter part of the name (e.g., `"nikon 85"`).  
-   MyPrint shows a fuzzy-matched list:
+   MyPrint shows files whose names contain the search text:
 
    ```
    1) nikon d850.pdf
@@ -328,7 +328,7 @@ python manage_print_settings.py
 
 This interactive tool allows you to:
 
-- Fuzzy-find a manual name  
+- Find a manual by part of its filename
 - Add a new entry  
 - Edit existing settings  
 - Remove outdated entries  

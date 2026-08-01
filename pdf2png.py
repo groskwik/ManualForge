@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import argparse
 import os
 import fitz  # PyMuPDF
 from PIL import Image
@@ -39,33 +40,53 @@ def find_pdf(partial_name):
     return matching_files[0]  # only match
 
 
-def main():
-    # 1. Ask user which PDF (by partial name)
+def parse_args():
+    parser = argparse.ArgumentParser(description="Convert PDF pages to PNG images.")
+    parser.add_argument("pdf", nargs="?", help="PDF path, or partial name to search for in configured folders")
+    parser.add_argument("--zoom", type=float, default=None, help="Render zoom factor. Lower values reduce output size.")
+    parser.add_argument("--pages", type=int, help="Number of pages to convert from the start of the PDF")
+    parser.add_argument("--output-dir", help="Folder to write PNG files into")
+    return parser.parse_args()
+
+
+def resolve_pdf_path(pdf_arg):
+    if pdf_arg:
+        if os.path.isfile(pdf_arg):
+            return pdf_arg
+        return find_pdf(pdf_arg)
+
     partial_name = input("Enter part of the PDF filename: ").strip()
-    pdf_path = find_pdf(partial_name)
+    return find_pdf(partial_name)
+
+
+def main():
+    args = parse_args()
+
+    pdf_path = resolve_pdf_path(args.pdf)
     if not pdf_path:
         sys.exit(1)
 
-    # 2. Ask for zoom
-    try:
-        zoom = float(input("Enter zoom factor (default 3 for good quality): ") or 3)
-    except ValueError:
-        zoom = 3
+    if args.zoom is not None:
+        zoom = args.zoom
+    else:
+        try:
+            zoom = float(input("Enter zoom factor (default 3 for good quality): ") or 3)
+        except ValueError:
+            zoom = 3
 
     matrix = fitz.Matrix(zoom, zoom)
 
-    # 3. Output folder based on PDF name (without extension)
     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-    out_dir = base_name + "_png"
+    out_dir = args.output_dir or base_name + "_png"
     os.makedirs(out_dir, exist_ok=True)
 
-    # 4. Convert each page
     print(f"\nConverting '{pdf_path}' -> '{out_dir}/' ...")
 
     with fitz.open(pdf_path) as doc:
-        for page_num in range(len(doc)):
+        page_count = min(args.pages or len(doc), len(doc))
+        for page_num in range(page_count):
             page = doc.load_page(page_num)
-            pix = page.get_pixmap(matrix=matrix)
+            pix = page.get_pixmap(matrix=matrix, alpha=False)
             img_path = os.path.join(out_dir, f"page_{page_num + 1:03d}.png")
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             img.save(img_path, "PNG")

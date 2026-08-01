@@ -532,10 +532,9 @@
     "monochrome,3-38,duplex,fit,paper=letter"
   ],
   "hp82211a-om-en": [
+    "color,1,simplex,fit,paper=letter",
     "monochrome,2,simplex,fit,paper=letter",
-    "monochrome,3-100,duplex,fit,paper=letter",
-    "monochrome,101-200,duplex,fit,paper=letter",
-    "monochrome,201-240,duplex,fit,paper=letter"
+    "monochrome,3-240,duplex,fit,paper=letter"
   ],
   "nikon d3500": [
     "monochrome,1-36,duplex,fit,paper=letter"
@@ -751,9 +750,8 @@
     "monochrome,1-75,duplex,fit,paper=letter"
   ],
   "hp85": [
-    "color,1,simplex,fit,paper=letter",
-    "monochrome,2,simplex,fit,paper=letter",
-    "monochrome,3-343,duplex,fit,paper=letter"
+    "color,1-2,duplex,fit,paper=letter",
+    "monochrome,3-344,duplex,fit,paper=letter"
   ],
   "nikon d7000": [
     "monochrome,1-348,duplex,fit,paper=letter"
@@ -819,8 +817,165 @@
     "color,1-30,duplexshort,fit,paper=letter,landscape"
   ],
   "singer 4411": [
-      "color,1,simplexshort,fit,paper=letter,landscape",
-      "color,2,simplexshort,fit,paper=letter,landscape",
-    "monochrome,3-62,duplexshort,fit,paper=letter,landscape"
+    "color,1,simplexshort,fit,paper=letter,landscape",
+    "color,2,simplexshort,fit,paper=letter,landscape",
+    "monochrome,3-31,duplexshort,fit,paper=letter,landscape"
+  ],
+  "phase one p40+": [
+    "color,1-96,duplexshort,fit,paper=letter,landscape"
+  ],
+  "hp46hp81-sm-en": [
+    "monochrome,1-30,duplex,fit,paper=letter"
+  ],
+  "yamaha dgx-650": [
+    "monochrome,1-86,duplex,fit,paper=letter"
+  ],
+  "olivetti m10 operations guide": [
+    "monochrome,1-194,duplex,fit,paper=letter"
+  ],
+  "stat pac manual for hewlett packard hp 41cv calculator module": [
+    "color,1-40,duplexshort,fit,paper=letter,landscape"
+  ],
+  "aviation pac manual for hewlett packard hp 41cv calculator module": [
+    "color,1-20,duplexshort,fit,paper=letter,landscape"
+  ],
+  "tascam model 24": [
+    "monochrome,1-64,duplex,fit,paper=letter",
+    "color,172,simplex,fit,paper=letter"
+  ],
+  "hewlett packard hp-42s calculator manual – half-letter size": [
+    "color,1-182,duplexshort,fit,paper=letter,landscape"
+  ],
+  "collins 30l-1 instruction manual": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-29,duplex,fit,paper=letter"
+  ],
+  "leica sofort 2": [
+    "color,1-87,duplexshort,fit,paper=letter,landscape"
+  ],
+  "dl-pascal for the pb-2000 user's guide - half letter size": [
+    "monochrome,1-176,duplexshort,fit,paper=letter,landscape"
+  ],
+  "home management pac manual for hewlett packard hp 41cv calculator module": [
+    "color,1-44,duplexshort,fit,paper=letter,landscape"
+  ],
+  "tektronix 2465a2455a2445a operators manual": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-16,duplex,fit,paper=letter",
+    "color,17-18,duplex,fit,paper=letter",
+    "monochrome,19-24,duplex,fit,paper=letter",
+    "color,25,simplex,fit,paper=letter",
+    "monochrome,27-60,duplex,fit,paper=letter",
+    "color,61,simplex,fit,paper=letter",
+    "monochrome,63-74,duplex,fit,paper=letter",
+    "color,75,simplex,fit,paper=letter",
+    "monochrome,77-82,duplex,fit,paper=letter",
+    "color,83,simplex,fit,paper=letter",
+    "monochrome,85-116,duplex,fit,paper=letter",
+    "color,117,simplex,fit,paper=letter",
+    "monochrome,119-156,duplex,fit,paper=letter",
+    "color,157,simplex,fit,paper=letter",
+    "monochrome,159-188,duplex,fit,paper=letter"
+  ],
+  "kodak pixpro az425": [
+    "color,1-94,duplexshort,fit,paper=letter,landscape"
+  ],
+  "circuit analysis pac manual for hewlett packard hp 41cv calculator module": [
+    "color,1-20,duplexshort,fit,paper=letter,landscape"
+  ],
+  "johnson viking ranger ii instruction manual": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-45,duplex,fit,paper=letter"
+  ],
+  "canon powershot elph 360": [
+    "color,1-157,duplexshort,fit,paper=letter,landscape"
+  ],
+  "yamaha dgx-230  ypg-235 owner’s manual – half-letter (statement) size": [
+    "color,1-60,duplexshort,fit,paper=letter,landscape",
+    "monochrome,3-58,duplexshort,fit,paper=letter,landscape",
+    "color,59-60,duplexshort,fit,paper=letter,landscape"
+  ],
+  "tektronix mso22 quickstart": [
+    "color,1-64,duplexshort,fit,paper=letter,landscape"
+  ],
+  "yaesu ft-2000 operating manual - premium card stock covers & 28 lb paper!": [
+    "color,1-1,duplexshort,fit,paper=letter,landscape"
+  ],
+  "manual for hewlett packard hp-35s calculator, half letter": [
+    "color,1-194,duplexshort,fit,paper=letter,landscape"
+  ],
+  "kenwood ts-850s instruction manual": [
+    "monochrome,1-85,duplex,fit,paper=letter"
+  ],
+  "quick start guide for hewlett packard hp-35s calculator - half letter format": [
+    "color,1-2,duplexshort,fit,paper=letter,landscape",
+    "monochrome,3-32,duplexshort,fit,paper=letter,landscape"
+  ],
+  "tds-48gx-surveypro-um": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-190,duplex,fit,paper=letter",
+    "color,220,simplex,fit,paper=letter"
+  ],
+  "tds-48gx-surveying-um": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-361,duplex,fit,paper=letter",
+    "color,362,simplex,fit,paper=letter"
+  ],
+  "Tandy Color Computer 3 Extended Basic": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-362,duplex,fit,paper=letter",
+    "color,363,simplex,fit,paper=letter"
+  ],
+  "nikon coolpix s7000": [
+    "monochrome,1-180,duplex,fit,paper=letter"
+  ],
+  "hp solve equation library application card owner manual for hp 48sx calculator": [
+    "color,1-2,duplexshort,fit,paper=letter,landscape",
+    "monochrome,3-120,duplexshort,fit,paper=letter,landscape"
+  ],
+  "collins r-390a instruction manual - premium card stock & protective covers!": [
+    "monochrome,1-38,duplex,fit,paper=letter"
+  ],
+  "hp41-synthetic-prog": [
+    "monochrome,3-100,duplex,fit,paper=letter"
+  ],
+  "yamaha dgx-620": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-142,duplex,fit,paper=letter"
+  ],
+  "tandy micro color computer": [
+    "monochrome,1-152,duplex,fit,paper=letter"
+  ],
+  "numworks manual": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-104,duplex,fit,paper=letter"
+  ],
+  "xiegu hf transceiver g90 operation manual": [
+    "monochrome,1-39,duplex,fit,paper=letter"
+  ],
+  "atlas 210x 215x instruction manual": [
+    "monochrome,1-56,duplex,fit,paper=letter"
+  ],
+  "siltronix 1011d operation manual": [
+    "monochrome,1-2,duplex,fit,paper=letter",
+    "color,3-32,duplex,fit,paper=letter",
+    "monochrome,23-28,duplex,fit,paper=letter"
+  ],
+  "kenwood sm-220 service & instruction manuals": [
+    "monochrome,1-24,duplex,fit,paper=letter"
+  ],
+  "kenwood ts-930s service manual": [
+    "monochrome,1-78,duplex,fit,paper=letter"
+  ],
+  "kenwood ts-940s service & instruction manuals": [
+    "monochrome,1-170,duplex,fit,paper=letter"
   ]
 }

@@ -12,6 +12,8 @@ from PyPDF2 import PdfReader
 PDF_FOLDERS = [
     r"C:\Users\benoi\Downloads\ebay_manuals",
     r"C:\Users\benoi\Downloads\manuals",
+    r"C:\Users\Admin\Downloads\ebay_manuals",
+    r"C:\Users\Admin\Downloads\manuals",
 ]
 
 DB_PATH = Path(__file__).with_name("print_settings.json")

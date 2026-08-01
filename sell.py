@@ -31,6 +31,18 @@ PDF_FOLDERS = [
 ]
 
 ANGLE_COVER_FILE = "cover_angle.jpg"
+ANGLE_TEMPLATE_FILES = {
+    "60": "60.png",
+    "200": "200.png",
+    "500": "500.png",
+}
+
+# Calibrated clockwise from top-left for the blank front cover on each template.
+ANGLE_TEMPLATE_QUADS = {
+    "60.png": [(294, 141), (1246, 107), (1495, 1390), (224, 1469)],
+    "200.png": [(255, 94), (985, 83), (1143, 1069), (211, 1111)],
+    "500.png": [(245, 104), (970, 72), (1176, 1055), (176, 1172)],
+}
 
 
 # ----------------------------------------------------------------------
@@ -124,6 +136,12 @@ def weight_string_to_lb_oz(weight_str: str) -> tuple[int, int]:
             return 0, oz
     except Exception:
         return 0, 0
+
+
+def listing_title_from_source(title: str) -> str:
+    """Remove competitor suffixes such as binding/cover details after a colon."""
+
+    return (title or "").split(":", 1)[0].strip()
 
 
 # ----------------------------------------------------------------------
@@ -319,21 +337,65 @@ def shrink_quad(quad, ratio):
         out.append((cx + (x - cx) * ratio, cy + (y - cy) * ratio))
     return out
 
-def place_on_angled_cover(base_img: Image.Image, overlay_img: Image.Image, ratio: float) -> Image.Image:
-    bw, bh = base_img.size
-    if (bw, bh) != (1600, 1600):
-        print(f"Warning: expected {ANGLE_COVER_FILE} to be 1600x1600, got {bw}x{bh}")
+def angle_template_for_pages(pages: int) -> str:
+    if pages <= 100:
+        return ANGLE_TEMPLATE_FILES["60"]
+    if pages <= 300:
+        return ANGLE_TEMPLATE_FILES["200"]
+    return ANGLE_TEMPLATE_FILES["500"]
 
-    dst_quad = [
-        (321, 152),
-        (1224, 107),
-        (1501, 1360),
-        (233, 1462),
+def detect_white_page_quad(base_img: Image.Image) -> list[tuple[int, int]] | None:
+    arr = np.array(base_img.convert("RGB"))
+    mask = arr.min(axis=2) > 238
+    ys, xs = np.where(mask)
+    if len(xs) < 1000:
+        return None
+
+    points = np.column_stack([xs, ys])
+    sums = xs + ys
+    diffs = xs - ys
+    return [
+        tuple(points[np.argmin(sums)]),
+        tuple(points[np.argmax(diffs)]),
+        tuple(points[np.argmax(sums)]),
+        tuple(points[np.argmin(diffs)]),
     ]
+
+def angle_template_quad(template_path: str, base_img: Image.Image) -> list[tuple[int, int]]:
+    name = Path(template_path).name.lower()
+    if name in ANGLE_TEMPLATE_QUADS:
+        return ANGLE_TEMPLATE_QUADS[name]
+
+    quad = detect_white_page_quad(base_img)
+    if quad is None:
+        raise ValueError(f"Could not detect white page area in angle template: {template_path}")
+    return quad
+
+def place_on_angled_cover(base_img: Image.Image, overlay_img: Image.Image, ratio: float, template_path: str | None = None) -> Image.Image:
+    bw, bh = base_img.size
+    if template_path is None:
+        template_path = ANGLE_COVER_FILE
+        if (bw, bh) != (1600, 1600):
+            print(f"Warning: expected {ANGLE_COVER_FILE} to be 1600x1600, got {bw}x{bh}")
+        dst_quad = [
+            (321, 152),
+            (1224, 107),
+            (1501, 1360),
+            (233, 1462),
+        ]
+    else:
+        dst_quad = angle_template_quad(template_path, base_img)
+
     dst_quad = shrink_quad(dst_quad, ratio if ratio > 0 else 1.0)
 
     ow, oh = overlay_img.size
-    src_quad = [(0, 0), (ow, 0), (ow, oh), (0, oh)]
+    edge_inset = 2
+    src_quad = [
+        (edge_inset, edge_inset),
+        (ow - edge_inset, edge_inset),
+        (ow - edge_inset, oh - edge_inset),
+        (edge_inset, oh - edge_inset),
+    ]
     coeffs = find_perspective_coeffs(dst_quad, src_quad)
 
     warped = overlay_img.transform(
@@ -371,26 +433,50 @@ def main():
     )
     parser.add_argument("--title", default=None,
                         help="Listing title used to rank PDF candidates; if omitted you will be prompted.")
+    parser.add_argument("--pdf", default=None,
+                        help="PDF path to use directly; skips interactive PDF selection.")
     parser.add_argument("--ratio", type=float, default=0.5,
                         help="Flat: fraction of cover width. Angled: size inside quad (1.0=full).")
     parser.add_argument("--cover", type=str, default="cover.png",
                         help="Cover image for flat mode (default=cover.png)")
     parser.add_argument("--angle", action="store_true",
                         help=f"Use angled cover photo ({ANGLE_COVER_FILE}) and perspective warp")
+    parser.add_argument("--angle-template", default="auto",
+                        help="Angle template: auto, 60, 200, 500, or a PNG path (default=auto)")
     parser.add_argument("--show", action="store_true", help="Show resulting image")
     parser.add_argument("--profile-dir", type=str, default=None, help="Passed to ebay_sell.py")
     parser.add_argument("--ebay-sell", type=str, default="ebay_sell.py",
                         help="Path to ebay_sell.py (default: ebay_sell.py in current dir)")
     parser.add_argument("--price-round", type=int, default=2, help="Decimals for price rounding (default=2)")
+    parser.add_argument("--competitor-price", type=float, default=None,
+                        help="If provided, final price is average of page-based price and competitor price.")
     parser.add_argument("--dry-run", action="store_true", help="Do everything but do not run ebay_sell.py")
+    parser.add_argument("--seed-item-id", default=None,
+                        help="Passed to ebay_sell.py to choose the Sell Similar seed listing.")
+    parser.add_argument("--preview", action="store_true", help="Passed to ebay_sell.py: click Preview/Review.")
+    parser.add_argument("--list", dest="do_list", action="store_true", help="Passed to ebay_sell.py: click List it.")
+    parser.add_argument("--pause", action="store_true", help="Passed to ebay_sell.py: leave browser open without preview/list.")
+    parser.add_argument("--no-delete-photos", action="store_true", help="Passed to ebay_sell.py.")
+    parser.add_argument("--no-wait-exit", action="store_true", help="Passed to ebay_sell.py.")
+    parser.add_argument("--update-links-json", default=None,
+                        help="Passed to ebay_sell.py after listing.")
+    parser.add_argument("--links-title", default=None,
+                        help="Title key passed to ebay_sell.py for links json updates.")
 
     args = parser.parse_args()
 
     title = args.title
     if not title or not title.strip():
         title = input("\nEnter title (--title): ").strip()
+    listing_title = listing_title_from_source(title)
 
-    pdf_path = choose_pdf_interactively(title)
+    if args.pdf:
+        pdf_path = str(Path(args.pdf).expanduser().resolve())
+        if not os.path.isfile(pdf_path):
+            print(f"Error: PDF not found: {pdf_path}")
+            raise SystemExit(1)
+    else:
+        pdf_path = choose_pdf_interactively(title)
     if not pdf_path:
         raise SystemExit(1)
 
@@ -401,9 +487,22 @@ def main():
 
     weight_str = compute_weight_from_pages(pages)
     lb, oz = weight_string_to_lb_oz(weight_str)
-    price = round(manual_price_from_pages(float(pages)), args.price_round)
+    page_price = manual_price_from_pages(float(pages))
+    if args.competitor_price is not None and args.competitor_price > 0:
+        price = round((page_price + args.competitor_price) / 2.0, args.price_round)
+    else:
+        price = round(page_price, args.price_round)
 
-    cover_template = ANGLE_COVER_FILE if args.angle else args.cover
+    if args.angle:
+        if args.angle_template == "auto":
+            cover_template = angle_template_for_pages(pages)
+        elif args.angle_template in ANGLE_TEMPLATE_FILES:
+            cover_template = ANGLE_TEMPLATE_FILES[args.angle_template]
+        else:
+            cover_template = args.angle_template
+    else:
+        cover_template = args.cover
+
     if not os.path.exists(cover_template):
         print(f"Cover file '{cover_template}' not found.")
         raise SystemExit(1)
@@ -412,8 +511,8 @@ def main():
     page_img = pdf_first_page_to_image(pdf_path).convert("RGB")
 
     if args.angle:
-        adj_ratio = min(max(args.ratio * 2.0, 0.01), 1.0)
-        out_img = place_on_angled_cover(base, page_img, adj_ratio)
+        adj_ratio = min(max(args.ratio * 1.92, 0.01), 1.0)
+        out_img = place_on_angled_cover(base, page_img, adj_ratio, cover_template)
         out_name = f"{Path(pdf_path).stem}.png"
     else:
         out_img = place_in_center(base, page_img, args.ratio)
@@ -423,12 +522,19 @@ def main():
     out_img.save(out_path, "PNG")
 
     print("\n--- Computed listing data ---")
-    print(f"Title:  {title}")
+    print(f"Title:  {listing_title}")
+    if listing_title != title:
+        print(f"Source: {title}")
     print(f"PDF:    {pdf_path}")
     print(f"Pages:  {pages}")
     print(f"Weight: {weight_str}  (lb={lb}, oz={oz})")
-    print(f"Price:  ${price:.2f}")
+    if args.competitor_price is not None and args.competitor_price > 0:
+        print(f"Price:  ${price:.2f}  (page=${page_price:.2f}, competitor=${args.competitor_price:.2f})")
+    else:
+        print(f"Price:  ${price:.2f}")
     print(f"Cover:  {out_path}")
+    if args.angle:
+        print(f"Template: {Path(cover_template).resolve()}")
 
     if args.show:
         plt.imshow(out_img)
@@ -448,7 +554,7 @@ def main():
 
     ebay_args = [
         "--cover", str(out_path),
-        "--title", title,
+        "--title", listing_title,
         "--pages", str(pages),
         "--price", f"{price:.2f}",
         "--lb", str(lb),
@@ -456,6 +562,22 @@ def main():
     ]
     if args.profile_dir:
         ebay_args += ["--profile-dir", args.profile_dir]
+    if args.seed_item_id:
+        ebay_args += ["--seed-item-id", args.seed_item_id]
+    if args.do_list:
+        ebay_args += ["--list"]
+    elif args.pause:
+        ebay_args += ["--pause"]
+    elif args.preview:
+        ebay_args += ["--preview"]
+    if args.no_delete_photos:
+        ebay_args += ["--no-delete-photos"]
+    if args.no_wait_exit:
+        ebay_args += ["--no-wait-exit"]
+    if args.update_links_json:
+        ebay_args += ["--update-links-json", args.update_links_json]
+    if args.links_title:
+        ebay_args += ["--links-title", args.links_title]
 
     if args.dry_run:
         cmd = [sys.executable, str(ebay_sell_path)] + ebay_args

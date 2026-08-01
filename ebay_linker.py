@@ -2053,14 +2053,14 @@ def main():
     ap.add_argument(
         "--pdf-folder",
         type=Path,
-        default=Path(r"c:\Users\benoi\Downloads\ebay_manuals"),
-        help="Folder containing PDFs (default: c:\\Users\\benoi\\Downloads\\ebay_manuals)",
+        default=Path(r"c:\Users\Admin\Downloads\ebay_manuals"),
+        help="Folder containing PDFs (default: c:\\Users\\Admin\\Downloads\\ebay_manuals)",
     )
     ap.add_argument(
         "--pdf-folder2",
         type=Path,
-        default=Path(r"c:\Users\benoi\Downloads\Manuals"),
-        help="Optional second PDF folder (default: c:\\Users\\benoi\\Downloads\\Manuals)",
+        default=Path(r"c:\Users\Admin\Downloads\Manuals"),
+        help="Optional second PDF folder (default: c:\\Users\\Admin\\Downloads\\Manuals)",
     )
     ap.add_argument("--recursive", action="store_true", help="Scan PDFs recursively under both folders")
 

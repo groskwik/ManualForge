@@ -50,7 +50,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
     TimeoutException,
@@ -61,9 +61,81 @@ from selenium.common.exceptions import (
 )
 
 DEFAULT_SEED_ITEM_ID = "356000157685"
+ITEM_URL_FMT = "https://www.ebay.com/itm/{item_id}"
 SELL_SIMILAR_FMT = "https://www.ebay.com/lstng?mode=SellSimilarItem&itemId={item_id}&sr=wn"
 
 RE_PAGES = re.compile(r"(\b)(\d+)\s*(page|pages)\b", re.IGNORECASE)
+
+
+def build_description_html(pages: int) -> str:
+    pages = int(pages)
+    return f'''<div style="max-width:900px; margin:auto; font-family:Arial, Helvetica, sans-serif; background:#ffffff; color:#222; border:1px solid #d9d9d9;">
+
+  <div style="background:#0b0b0b; color:white; padding:28px 30px;">
+    <h1 style="margin:0; font-size:32px; font-weight:700; letter-spacing:1px;">Printed Manual</h1>
+    <p style="margin-top:10px; font-size:15px; color:#d6d6d6;">
+      Professional full-size printed reproduction
+    </p>
+  </div>
+
+  <div style="padding:35px 32px;">
+    <div style="background:#f5f5f5; border-left:5px solid #c8102e; padding:18px 22px; margin-bottom:30px;">
+      <h2 style="margin:0 0 10px 0; font-size:22px; color:#111;">Specifications</h2>
+      <p style="margin:0; font-size:15px; color:#555;">
+        Premium-quality manual reproduction designed for durability and readability.
+      </p>
+    </div>
+
+    <table style="width:100%; border-collapse:collapse; font-size:15px;">
+      <tbody>
+        <tr>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5; width:220px; font-weight:bold;">Format</td>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5;">8.5&quot; x 11&quot; reprint of the original manual</td>
+        </tr>
+
+        <tr style="background:#fafafa;">
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5; font-weight:bold;">Pages</td>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5;">{pages} Pages</td>
+        </tr>
+
+        <tr>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5; font-weight:bold;">Binding</td>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5;">Combs</td>
+        </tr>
+
+        <tr style="background:#fafafa;">
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5; font-weight:bold;">Protective Covers</td>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5;">Clear 10 mil PVC protective covers help keep stains and spills off your manual</td>
+        </tr>
+
+        <tr>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5; font-weight:bold;">Printing</td>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5;">Printed using commercial-grade color laser printers capable of up to 2400 DPI output</td>
+        </tr>
+
+        <tr style="background:#fafafa;">
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5; font-weight:bold;">Returns</td>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5;">Free returns accepted if you are not satisfied</td>
+        </tr>
+
+        <tr>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5; font-weight:bold;">Shipping</td>
+          <td style="padding:16px; border-bottom:1px solid #e5e5e5;">Free shipping within the United States<br>Upgraded shipping options available at checkout</td>
+        </tr>
+
+        <tr style="background:#fafafa;">
+          <td style="padding:16px; font-weight:bold;">International Orders</td>
+          <td style="padding:16px;">International shipping available</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top:35px; background:#111; color:white; padding:20px 24px; text-align:center;">
+      <div style="font-size:20px; font-weight:bold; margin-bottom:8px;">Premium Printed Manual Reproduction</div>
+      <div style="font-size:14px; color:#d0d0d0;">Clean printing &bull; Durable binding &bull; Full-size pages &bull; Professionally produced</div>
+    </div>
+  </div>
+</div>'''
 
 
 # ----------------------------
@@ -267,6 +339,41 @@ def build_sell_similar_url(seed_item_id: str) -> str:
     return SELL_SIMILAR_FMT.format(item_id=str(seed_item_id).strip())
 
 
+def build_item_url(seed_item_id: str) -> str:
+    return ITEM_URL_FMT.format(item_id=str(seed_item_id).strip())
+
+
+def extract_item_id_from_text(text: str) -> str:
+    patterns = [
+        r"/itm/(\d+)",
+        r"[?&]itemId=(\d+)",
+        r"[?&]item=(\d+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text or "")
+        if match:
+            return match.group(1)
+    return ""
+
+
+def update_links_json(path: Path, title: str, item_id: str, debug: bool = False) -> None:
+    if not item_id:
+        return
+
+    data = load_links_json(path, debug=debug)
+    data[title] = {
+        "url": f"https://www.ebay.com/itm/{item_id}",
+        "item_id": item_id,
+    }
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+    print(f"[INFO] Updated links json: {path} -> {title} ({item_id})")
+
+
 # ----------------------------
 # Process helpers
 # ----------------------------
@@ -308,6 +415,82 @@ def ensure_logged_in_or_pause(driver) -> None:
         input()
 
 
+def open_sell_similar_from_item_page(driver, wait: WebDriverWait, item_id: str, debug: bool = False) -> None:
+    """
+    Competitor item IDs need to start from /itm/<id> and click eBay's
+    "Sell one like this" path. Fall back to the direct listing URL if needed.
+    """
+
+    item_url = build_item_url(item_id)
+    fallback_url = build_sell_similar_url(item_id)
+
+    if debug:
+        print(f"[INFO] Opening seed item page: {item_url}")
+
+    driver.get(item_url)
+    ensure_logged_in_or_pause(driver)
+    wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+    wait_dom_ready(driver, timeout=25)
+    time.sleep(1.0)
+
+    candidates = [
+        (By.XPATH, "//a[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'sell one like this')]"),
+        (By.XPATH, "//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'sell one like this')]"),
+        (By.XPATH, "//a[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'sell similar')]"),
+        (By.XPATH, "//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'sell similar')]"),
+        (By.CSS_SELECTOR, "a[href*='SellSimilarItem']"),
+        (By.CSS_SELECTOR, "a[href*='mode=SellSimilarItem']"),
+    ]
+
+    for loc in candidates:
+        try:
+            el = WebDriverWait(driver, 6).until(EC.element_to_be_clickable(loc))
+            href = ""
+            try:
+                href = (el.get_attribute("href") or "").strip()
+            except Exception:
+                href = ""
+
+            prev_url = driver.current_url or ""
+            previous_handles = set(driver.window_handles)
+            if debug:
+                print(f"[INFO] Clicking Sell Similar control from item page: {loc}")
+            safe_click(driver, el)
+            time.sleep(1.0)
+            switch_to_newest_window(driver, previous_handles, debug=debug)
+            wait_for_possible_redirect(driver, prev_url, timeout=30, debug=debug)
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            wait_dom_ready(driver, timeout=25)
+            if wait_for_listing_editor(driver, timeout=25, debug=debug):
+                return
+
+            if href:
+                if debug:
+                    print(f"[WARN] Click did not reach editor; trying Sell Similar href directly: {href}")
+                driver.get(href)
+                ensure_logged_in_or_pause(driver)
+                wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                wait_dom_ready(driver, timeout=25)
+                if wait_for_listing_editor(driver, timeout=25, debug=debug):
+                    return
+        except Exception:
+            continue
+
+    if debug:
+        print(f"[WARN] Could not find Sell Similar control; falling back to: {fallback_url}")
+
+    driver.get(fallback_url)
+    ensure_logged_in_or_pause(driver)
+    wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+    wait_dom_ready(driver, timeout=25)
+    time.sleep(1.0)
+    if not wait_for_listing_editor(driver, timeout=35, debug=debug):
+        raise RuntimeError(
+            "Could not open eBay listing editor from seed item. "
+            f"Current URL: {driver.current_url}"
+        )
+
+
 def js_click(driver, el) -> None:
     driver.execute_script("arguments[0].click();", el)
 
@@ -346,6 +529,43 @@ def wait_for_possible_redirect(driver, prev_url: str, timeout: int = 25, debug: 
         except Exception:
             pass
         time.sleep(0.2)
+
+
+def wait_for_listing_editor(driver, timeout: int = 35, debug: bool = False) -> bool:
+    """Return True once the eBay listing editor appears."""
+
+    locators = [
+        (By.CSS_SELECTOR, "input[type='file']"),
+        (By.CSS_SELECTOR, "input[name='title']"),
+        (By.CSS_SELECTOR, "textarea[id*='rawEditor']"),
+    ]
+
+    end = time.time() + timeout
+    while time.time() < end:
+        for loc in locators:
+            try:
+                if driver.find_elements(loc[0], loc[1]):
+                    return True
+            except Exception:
+                pass
+        time.sleep(0.4)
+
+    if debug:
+        print(f"[WARN] Listing editor did not appear. Current URL: {driver.current_url}")
+    return False
+
+
+def switch_to_newest_window(driver, previous_handles, debug: bool = False) -> None:
+    try:
+        handles = driver.window_handles
+    except Exception:
+        return
+
+    new_handles = [h for h in handles if h not in previous_handles]
+    if new_handles:
+        driver.switch_to.window(new_handles[-1])
+        if debug:
+            print(f"[INFO] Switched to new eBay window/tab: {driver.current_url}")
 
 
 def nuke_snackbar_overlays(driver, debug: bool = False) -> None:
@@ -481,6 +701,495 @@ def clear_and_type_locator(
             el.send_keys(Keys.ENTER)
         except Exception:
             pass
+
+
+def set_condition_brand_new(driver, wait: WebDriverWait, debug: bool = False) -> bool:
+    """Select Brand New/New condition when eBay requires a condition value."""
+
+    candidates = [
+        (By.CSS_SELECTOR, "input[type='radio'][value='1000']"),
+        (By.XPATH, "//*[@role='radio' and contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'brand new')]"),
+        (By.XPATH, "//input[@type='radio' and contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'brand new')]"),
+        (By.XPATH, "//label[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'brand new')]"),
+        (By.XPATH, "//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'brand new')]"),
+        (By.XPATH, "//*[@role='button' and contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'brand new')]"),
+        (By.XPATH, "//*[@role='radio' and normalize-space(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'))='new']"),
+        (By.XPATH, "//input[@type='radio' and normalize-space(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'))='new']"),
+        (By.XPATH, "//label[normalize-space(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'))='new']"),
+        (By.XPATH, "//button[normalize-space(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'))='new']"),
+    ]
+
+    for loc in candidates:
+        try:
+            el = WebDriverWait(driver, 4).until(EC.presence_of_element_located(loc))
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+            nuke_snackbar_overlays(driver, debug=debug)
+            try:
+                if el.tag_name.lower() == "input":
+                    driver.execute_script("arguments[0].click();", el)
+                else:
+                    safe_click(driver, el)
+            except Exception:
+                js_click(driver, el)
+            time.sleep(0.4)
+            if debug:
+                print(f"[INFO] Selected condition using locator: {loc}")
+            return True
+        except Exception:
+            continue
+
+    if debug:
+        print("[WARN] Could not find Brand New/New condition control.")
+    return False
+
+
+def set_shipping_media_mail_free(driver, wait: WebDriverWait, debug: bool = False) -> None:
+    """Best-effort shipping setup: USPS Media Mail service with Free shipping enabled."""
+
+    def click_first(candidates, label: str) -> bool:
+        for loc in candidates:
+            try:
+                el = WebDriverWait(driver, 4).until(EC.presence_of_element_located(loc))
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+                nuke_snackbar_overlays(driver, debug=debug)
+                try:
+                    safe_click(driver, el)
+                except Exception:
+                    js_click(driver, el)
+                time.sleep(0.5)
+                if debug:
+                    print(f"[INFO] Clicked {label} using locator: {loc}")
+                return True
+            except Exception:
+                continue
+        if debug:
+            print(f"[WARN] Could not find {label} control.")
+        return False
+
+    def element_context_text(el) -> str:
+        try:
+            return driver.execute_script(
+                """
+                const el = arguments[0];
+                const label = el.closest('label');
+                const row = el.closest('tr, li, div');
+                return ((el.getAttribute('aria-label') || '') + ' ' +
+                        (label ? label.innerText : '') + ' ' +
+                        (row ? row.innerText : '')).toLowerCase();
+                """,
+                el,
+            ) or ""
+        except Exception:
+            return ""
+
+    def checkbox_checked(el) -> bool:
+        try:
+            return el.is_selected() or (el.get_attribute("aria-checked") or "").lower() == "true"
+        except Exception:
+            return False
+
+    def set_checkbox(el, checked: bool) -> None:
+        if checkbox_checked(el) == checked:
+            return
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        nuke_snackbar_overlays(driver, debug=debug)
+        try:
+            safe_click(driver, el)
+        except Exception:
+            js_click(driver, el)
+        time.sleep(0.25)
+
+    def select_media_mail_from_selects() -> bool:
+        try:
+            selects = driver.find_elements(By.CSS_SELECTOR, "select")
+        except Exception:
+            return False
+
+        for sel in selects:
+            try:
+                if not sel.is_displayed():
+                    continue
+                options = sel.find_elements(By.TAG_NAME, "option")
+                media_option = None
+                for option in options:
+                    text = (option.text or "").strip().lower()
+                    if "media mail" in text:
+                        media_option = option
+                        break
+                if media_option is None:
+                    continue
+
+                Select(sel).select_by_visible_text(media_option.text)
+                dispatch_input_change(driver, sel)
+                if debug:
+                    print(f"[INFO] Selected USPS Media Mail from <select>: {media_option.text}")
+                return True
+            except Exception:
+                continue
+
+        return False
+
+    def uncheck_non_media_services_in_dialog() -> None:
+        try:
+            checkboxes = driver.find_elements(By.XPATH, "//div[@role='dialog']//input[@type='checkbox']")
+        except Exception:
+            checkboxes = []
+
+        for cb in checkboxes:
+            try:
+                text = element_context_text(cb)
+                if checkbox_checked(cb) and "media mail" not in text:
+                    if debug:
+                        print(f"[INFO] Unchecking non-Media shipping service: {text[:80]}")
+                    set_checkbox(cb, False)
+            except Exception:
+                continue
+
+    def select_media_mail_via_search_dialog() -> bool:
+        search_button_candidates = [
+            (By.XPATH, "//div[@role='dialog']//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search')]"),
+            (By.XPATH, "//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search')]"),
+            (By.XPATH, "//div[@role='dialog']//*[@role='button' and contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search')]"),
+        ]
+        click_first(search_button_candidates, "shipping service search button")
+
+        uncheck_non_media_services_in_dialog()
+
+        search_inputs = [
+            (By.XPATH, "//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search')]"),
+            (By.XPATH, "//input[contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search')]"),
+            (By.CSS_SELECTOR, "input[type='search']"),
+            (By.XPATH, "//div[@role='dialog']//input[@type='text']"),
+            (By.XPATH, "//div[contains(@class, 'dialog')]//input[@type='text']"),
+        ]
+
+        search_el = None
+        for loc in search_inputs:
+            try:
+                search_el = WebDriverWait(driver, 5).until(EC.presence_of_element_located(loc))
+                break
+            except Exception:
+                search_el = None
+
+        if search_el is None:
+            if debug:
+                print("[WARN] Shipping service search input not found.")
+            return False
+
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", search_el)
+            search_el.click()
+            search_el.send_keys(Keys.CONTROL, "a")
+            search_el.send_keys(Keys.BACKSPACE)
+            search_el.send_keys("media")
+            dispatch_input_change(driver, search_el)
+            time.sleep(1.0)
+        except Exception as e:
+            if debug:
+                print(f"[WARN] Could not type into shipping search input: {e}")
+            return False
+
+        if not click_visible_media_mail_choice():
+            if debug:
+                print("[WARN] USPS Media Mail choice not found/clickable after search.")
+                save_shipping_debug_html("debug_shipping_media_mail_not_selected.html")
+            return False
+
+        done_candidates = [
+            (By.XPATH, "//div[@role='dialog']//button[normalize-space()='Done']"),
+            (By.XPATH, "//div[@role='dialog']//button[normalize-space()='Apply']"),
+            (By.XPATH, "//div[@role='dialog']//button[normalize-space()='Save']"),
+            (By.XPATH, "//button[normalize-space()='Done']"),
+            (By.XPATH, "//button[normalize-space()='Apply']"),
+            (By.XPATH, "//button[normalize-space()='Save']"),
+        ]
+        click_first(done_candidates, "shipping service dialog Done/Apply button")
+        return True
+
+    def save_shipping_debug_html(filename: str) -> None:
+        try:
+            debug_html = Path(__file__).resolve().parent / filename
+            debug_html.write_text(driver.page_source or "", encoding="utf-8")
+            print(f"[INFO] Saved shipping debug HTML to: {debug_html}")
+        except Exception:
+            pass
+
+    def click_visible_media_mail_choice() -> bool:
+        """Click the actual Media Mail option/checkbox visible after searching media."""
+
+        script = r"""
+        const lower = s => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const isVisible = el => {
+          const r = el.getBoundingClientRect();
+          const style = window.getComputedStyle(el);
+          return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+        };
+        const roots = Array.from(document.querySelectorAll('[role="dialog"]'));
+        if (!roots.length) roots.push(document.body);
+
+        for (const root of roots) {
+          const nodes = Array.from(root.querySelectorAll('label, div, span, button, li, tr'))
+            .filter(el => isVisible(el) && lower(el.innerText).includes('media mail'));
+
+          for (const node of nodes) {
+            const container = node.closest('label, li, tr, [role="option"], [role="checkbox"], [role="radio"], div') || node;
+            const input = container.querySelector('input[type="checkbox"], input[type="radio"]') ||
+              (container.tagName === 'LABEL' ? document.getElementById(container.getAttribute('for')) : null) ||
+              node.querySelector('input[type="checkbox"], input[type="radio"]');
+
+            if (input && isVisible(input)) {
+              if (!input.checked) input.click();
+              return true;
+            }
+
+            const checkboxRole = container.matches('[role="checkbox"], [role="radio"], [role="option"]')
+              ? container
+              : container.querySelector('[role="checkbox"], [role="radio"], [role="option"]');
+            if (checkboxRole && isVisible(checkboxRole)) {
+              const checked = checkboxRole.getAttribute('aria-checked') === 'true' || checkboxRole.getAttribute('aria-selected') === 'true';
+              if (!checked) checkboxRole.click();
+              return true;
+            }
+
+            container.click();
+            return true;
+          }
+        }
+        return false;
+        """
+
+        try:
+            clicked = bool(driver.execute_script(script))
+            if clicked:
+                time.sleep(0.6)
+                if debug:
+                    print("[INFO] Clicked visible USPS Media Mail choice via JS row search.")
+                return True
+        except Exception as e:
+            if debug:
+                print(f"[WARN] JS Media Mail choice click failed: {e}")
+
+        media_text_candidates = [
+            (By.XPATH, "//div[@role='dialog']//*[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'media mail')]"),
+            (By.XPATH, "//*[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'media mail')]"),
+        ]
+
+        for loc in media_text_candidates:
+            try:
+                elements = driver.find_elements(loc[0], loc[1])
+                for media_el in elements:
+                    if not media_el.is_displayed():
+                        continue
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", media_el)
+                    row = driver.execute_script(
+                        "return arguments[0].closest('label, li, tr, [role=option], [role=checkbox], [role=radio], div') || arguments[0];",
+                        media_el,
+                    )
+                    try:
+                        checkbox = row.find_element(By.XPATH, ".//input[@type='checkbox' or @type='radio']")
+                        if not checkbox_checked(checkbox):
+                            set_checkbox(checkbox, True)
+                        return True
+                    except Exception:
+                        pass
+                    try:
+                        safe_click(driver, row)
+                    except Exception:
+                        js_click(driver, row)
+                    time.sleep(0.5)
+                    return True
+            except Exception:
+                continue
+
+        return False
+
+    media_mail_exact = [
+        (By.XPATH, "//*[self::button or self::div or self::span or self::label or self::option][contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'usps media mail') or contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'media mail')]")
+    ]
+
+    service_openers = [
+        (By.XPATH, "//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'shipping service')]"),
+        (By.XPATH, "//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'service')]"),
+        (By.XPATH, "//*[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'shipping service')]/following::button[1]"),
+        (By.CSS_SELECTOR, "select[name*='service' i]"),
+    ]
+
+    selected_media = select_media_mail_from_selects()
+
+    if not selected_media:
+        if click_first(service_openers, "shipping service dropdown"):
+            if not select_media_mail_via_search_dialog():
+                click_first(media_mail_exact, "USPS Media Mail option")
+        else:
+            click_first(media_mail_exact, "USPS Media Mail option")
+
+    free_shipping_inputs = [
+        (By.XPATH, "//input[@type='checkbox' and (contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'free shipping') or contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'free'))]"),
+        (By.XPATH, "//label[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'free shipping')]"),
+        (By.XPATH, "//*[self::button or self::div or self::span][contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'free shipping')]"),
+    ]
+
+    for loc in free_shipping_inputs:
+        try:
+            el = WebDriverWait(driver, 4).until(EC.presence_of_element_located(loc))
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+            nuke_snackbar_overlays(driver, debug=debug)
+
+            checked = False
+            try:
+                checked = el.is_selected() or (el.get_attribute("aria-checked") or "").lower() == "true"
+            except Exception:
+                checked = False
+
+            if not checked:
+                try:
+                    safe_click(driver, el)
+                except Exception:
+                    js_click(driver, el)
+                time.sleep(0.4)
+
+            if debug:
+                print(f"[INFO] Ensured Free shipping using locator: {loc}")
+            return
+        except Exception:
+            continue
+
+    if debug:
+        print("[WARN] Could not find Free shipping checkbox/control.")
+
+
+def ensure_free_shipping(driver, debug: bool = False) -> bool:
+    """Best-effort: check the Free shipping box without changing shipping service."""
+
+    expand_candidates = [
+        (By.XPATH, "//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'shipping') and (@aria-expanded='false' or contains(@class, 'expand'))]"),
+        (By.XPATH, "//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'delivery') and (@aria-expanded='false' or contains(@class, 'expand'))]"),
+        (By.XPATH, "//*[@role='button' and contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'shipping') and @aria-expanded='false']"),
+    ]
+
+    for loc in expand_candidates:
+        try:
+            for el in driver.find_elements(loc[0], loc[1]):
+                if not el.is_displayed():
+                    continue
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+                try:
+                    safe_click(driver, el)
+                except Exception:
+                    js_click(driver, el)
+                time.sleep(0.5)
+        except Exception:
+            continue
+
+    script = r"""
+    const lower = s => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const isVisible = el => {
+      const r = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+
+    const clickIfUnchecked = input => {
+      if (!input) return false;
+      input.scrollIntoView({block: 'center'});
+      if (input.matches('input[type="checkbox"]')) {
+        if (!input.checked) input.click();
+        return true;
+      }
+      if (input.getAttribute('role') === 'checkbox') {
+        if (input.getAttribute('aria-checked') !== 'true') input.click();
+        return true;
+      }
+      return false;
+    };
+
+    for (const input of Array.from(document.querySelectorAll('input[type="checkbox"], [role="checkbox"]'))) {
+      const aria = lower(input.getAttribute('aria-label') || input.getAttribute('name') || input.id || '');
+      if (aria.includes('free shipping')) return clickIfUnchecked(input);
+
+      if (input.id) {
+        const label = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+        if (label && lower(label.innerText).includes('free shipping')) return clickIfUnchecked(input);
+      }
+
+      let cur = input;
+      for (let i = 0; cur && i < 8; i++, cur = cur.parentElement) {
+        if (lower(cur.innerText).includes('free shipping')) return clickIfUnchecked(input);
+      }
+    }
+
+    const nodes = Array.from(document.querySelectorAll('label, div, span, button'))
+      .filter(el => isVisible(el) && lower((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '')).includes('free shipping'));
+
+    for (const node of nodes) {
+      const containers = [];
+      let cur = node;
+      for (let i = 0; cur && i < 8; i++, cur = cur.parentElement) containers.push(cur);
+
+      for (const container of containers) {
+        const input = container.querySelector('input[type="checkbox"], [role="checkbox"]') ||
+          (container.tagName === 'LABEL' ? document.getElementById(container.getAttribute('for')) : null) ||
+          node.querySelector('input[type="checkbox"], [role="checkbox"]');
+
+        if (clickIfUnchecked(input)) return true;
+      }
+
+      // Do not click the surrounding shipping row/container. On eBay this can
+      // open/change the shipping method instead of checking Free shipping.
+    }
+    return false;
+    """
+
+    try:
+        clicked = bool(driver.execute_script(script))
+        if clicked:
+            time.sleep(0.4)
+            if debug:
+                print("[INFO] Ensured Free shipping via JS label search.")
+            return True
+    except Exception as e:
+        if debug:
+            print(f"[WARN] Free shipping JS search failed: {e}")
+
+    free_shipping_inputs = [
+        (By.XPATH, "//input[@type='checkbox' and (contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'free shipping') or contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'free'))]"),
+        (By.XPATH, "//label[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'free shipping')]"),
+        (By.XPATH, "//*[self::button or self::div or self::span][contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'free shipping')]"),
+    ]
+
+    for loc in free_shipping_inputs:
+        try:
+            el = WebDriverWait(driver, 4).until(EC.presence_of_element_located(loc))
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+            nuke_snackbar_overlays(driver, debug=debug)
+            checked = False
+            try:
+                checked = el.is_selected() or (el.get_attribute("aria-checked") or "").lower() == "true"
+            except Exception:
+                checked = False
+
+            if not checked:
+                try:
+                    safe_click(driver, el)
+                except Exception:
+                    js_click(driver, el)
+                time.sleep(0.4)
+
+            if debug:
+                print(f"[INFO] Ensured Free shipping using locator: {loc}")
+            return True
+        except Exception:
+            continue
+
+    if debug:
+        print("[WARN] Could not find Free shipping checkbox/control.")
+        try:
+            debug_html = Path(__file__).resolve().parent / "debug_free_shipping_not_found.html"
+            debug_html.write_text(driver.page_source or "", encoding="utf-8")
+            print(f"[INFO] Saved free-shipping debug HTML to: {debug_html}")
+        except Exception:
+            pass
+    return False
 
 
 def build_driver(profile_dir: Path, headless: bool, chrome_binary: str | None = None):
@@ -670,7 +1379,18 @@ def upload_cover_image(
     if debug:
         print(f"[INFO] Delete-photo button count (before upload): {before_del}")
 
-    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']")))
+    try:
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']")))
+    except TimeoutException as e:
+        debug_html = Path(__file__).resolve().parent / "debug_missing_upload_input.html"
+        try:
+            debug_html.write_text(driver.page_source or "", encoding="utf-8")
+        except Exception:
+            pass
+        raise RuntimeError(
+            "Could not find the photo upload input. The eBay listing editor may not be fully open. "
+            f"Current URL: {driver.current_url}. Saved page HTML to: {debug_html}"
+        ) from e
 
     def pick_best_file_input():
         inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
@@ -773,18 +1493,11 @@ def upload_cover_image(
 # ----------------------------
 def set_pages_in_description(driver, wait: WebDriverWait, pages: int, debug: bool = False) -> None:
     """
-    Ensure eBay description is in HTML/raw mode, then update the "X Pages" snippet
-    inside the raw HTML textarea. Works with both escaped HTML (&lt;p&gt;) and plain.
-
-    Strategy:
-      1) Toggle HTML mode checkbox ON (best-effort).
-      2) Locate the raw textarea (id contains 'rawEditor' OR class '...__html').
-      3) Replace first occurrence of '<number> page(s)' or 'Pages' text.
-      4) If not found, prepend a bold pages line.
-      5) Use React-friendly native setter + input/change dispatch.
-      6) Verify result; retry once if needed.
+    Ensure eBay description is in HTML/raw mode, then write the standard
+    manual listing template with the computed page count included.
     """
     pages_str = str(int(pages))
+    updated = build_description_html(int(pages))
 
     # ---------- helper: React-friendly value set ----------
     def set_textarea_value_react(el, value: str):
@@ -887,41 +1600,14 @@ def set_pages_in_description(driver, wait: WebDriverWait, pages: int, debug: boo
     if debug:
         print("[INFO] Current description length:", len(current))
 
-    # ---------- 4) Update pages line ----------
-    def apply_update(text: str) -> str:
-        # Replace first "123 page(s)" anywhere
-        if RE_PAGES.search(text):
-            return RE_PAGES.sub(lambda m: f"{m.group(1)}{pages_str} Pages", text, count=1)
-
-        # If not found, prepend a bold pages block.
-        # Handle both escaped HTML and plain HTML/editor text.
-        # Most of your templates use escaped tags (&lt;p&gt;...).
-        if "&lt;" in text and "&gt;" in text:
-            prefix = f"&lt;p&gt;&lt;strong&gt;{pages_str} Pages&lt;/strong&gt;&lt;/p&gt;"
-        else:
-            prefix = f"<p><strong>{pages_str} Pages</strong></p>"
-
-        return prefix + text
-
-    updated = apply_update(current)
-
-    if updated == current:
-        # Extremely unlikely, but keep safe
-        if debug:
-            print("[WARN] Pages update produced no changes; forcing prepend.")
-        if "&lt;" in current and "&gt;" in current:
-            updated = f"&lt;p&gt;&lt;strong&gt;{pages_str} Pages&lt;/strong&gt;&lt;/p&gt;" + current
-        else:
-            updated = f"<p><strong>{pages_str} Pages</strong></p>" + current
-
-    # ---------- 5) Set value + verify (retry once) ----------
+    # ---------- 4) Set value + verify (retry once) ----------
     for attempt in range(2):
         set_textarea_value_react(el, updated)
         time.sleep(0.3)
 
         # Verify: read back textarea value
         back = el.get_attribute("value") or ""
-        ok = (pages_str in back) and (back != current)
+        ok = (pages_str in back) and ("Printed Manual" in back)
 
         if debug:
             print(f"[INFO] Pages update attempt {attempt+1}/2: ok={ok} back_len={len(back)}")
@@ -974,7 +1660,11 @@ def click_list_it(driver, wait: WebDriverWait, debug: bool = False) -> None:
         (By.XPATH, "//button[normalize-space()='List it']"),
         (By.XPATH, "//button[@aria-label='List it']"),
         (By.XPATH, "//button[contains(@aria-label,'List it')]"),
-        (By.CSS_SELECTOR, "button.btn.btn--large.btn--primary"),
+        (By.XPATH, "//button[contains(normalize-space(.),'List it')]"),
+        (By.XPATH, "//button[contains(normalize-space(.),'Publish listing')]"),
+        (By.XPATH, "//button[contains(normalize-space(.),'Publish')]"),
+        (By.XPATH, "//button[contains(normalize-space(.),'Submit listing')]"),
+        (By.XPATH, "//button[contains(normalize-space(.),'Submit')]"),
     ]
 
     btn = None
@@ -995,6 +1685,162 @@ def click_list_it(driver, wait: WebDriverWait, debug: bool = False) -> None:
     time.sleep(1.0)
 
 
+def click_list_it_with_review_fallback(driver, wait: WebDriverWait, debug: bool = False) -> None:
+    """Click List it, or click Review/Continue first if eBay uses a two-step flow."""
+
+    try:
+        click_list_it(driver, wait, debug=debug)
+        return
+    except RuntimeError:
+        if debug:
+            print("[WARN] Direct 'List it' button not found; trying review/continue step first.")
+
+    review_candidates = [
+        (By.XPATH, "//button[normalize-space()='Review listing']"),
+        (By.XPATH, "//button[contains(normalize-space(.),'Review listing')]"),
+        (By.XPATH, "//button[normalize-space()='Review']"),
+        (By.XPATH, "//button[contains(normalize-space(.),'Review')]"),
+        (By.XPATH, "//button[normalize-space()='Preview']"),
+        (By.XPATH, "//button[contains(normalize-space(.),'Preview')]"),
+        (By.XPATH, "//button[normalize-space()='Continue']"),
+        (By.XPATH, "//button[contains(normalize-space(.),'Continue')]"),
+    ]
+
+    btn = None
+    for loc in review_candidates:
+        try:
+            btn = wait.until(EC.element_to_be_clickable(loc))
+            break
+        except Exception:
+            btn = None
+
+    if not btn:
+        debug_html = Path(__file__).resolve().parent / "debug_missing_list_button.html"
+        try:
+            debug_html.write_text(driver.page_source or "", encoding="utf-8")
+        except Exception:
+            pass
+        raise RuntimeError(
+            "Could not find 'List it' or a Review/Continue button. "
+            f"Current URL: {driver.current_url}. Saved page HTML to: {debug_html}"
+        )
+
+    prev_url = driver.current_url or ""
+    nuke_snackbar_overlays(driver, debug=debug)
+    if debug:
+        print("[INFO] Clicking Review/Preview/Continue before final List it")
+    safe_click(driver, btn)
+    wait_for_possible_redirect(driver, prev_url, timeout=30, debug=debug)
+    wait_dom_ready(driver, timeout=25)
+    time.sleep(1.5)
+
+    click_list_it(driver, wait, debug=debug)
+
+
+def click_done_after_submit(driver, timeout: int = 20, debug: bool = False) -> bool:
+    candidates = [
+        (By.XPATH, "//button[normalize-space()='Done']"),
+        (By.XPATH, "//button[contains(normalize-space(.),'Done')]"),
+        (By.XPATH, "//a[normalize-space()='Done']"),
+        (By.XPATH, "//a[contains(normalize-space(.),'Done')]"),
+    ]
+
+    end = time.time() + timeout
+    while time.time() < end:
+        for loc in candidates:
+            try:
+                btn = WebDriverWait(driver, 2).until(EC.element_to_be_clickable(loc))
+                nuke_snackbar_overlays(driver, debug=debug)
+                if debug:
+                    print("[INFO] Clicking post-submit Done button")
+                safe_click(driver, btn)
+                time.sleep(1.0)
+                return True
+            except Exception:
+                continue
+        time.sleep(0.5)
+
+    if debug:
+        print("[WARN] Post-submit Done button not found.")
+    return False
+
+
+def wait_after_list_submit(driver, timeout: int = 45, debug: bool = False) -> bool:
+    """Wait for eBay to leave the editor or expose validation after final submit."""
+
+    bad_phrases = [
+        "looks like something is missing or invalid",
+        "please fix any issues",
+        "something is missing",
+    ]
+    success_phrases = [
+        "your listing is live",
+        "listing is live",
+        "you listed",
+        "congratulations",
+        "successfully listed",
+    ]
+
+    end = time.time() + timeout
+    last_url = ""
+    while time.time() < end:
+        try:
+            cur_url = driver.current_url or ""
+            last_url = cur_url
+            text = (driver.find_element(By.TAG_NAME, "body").text or "").lower()
+
+            if any(phrase in text for phrase in bad_phrases):
+                debug_html = Path(__file__).resolve().parent / "debug_list_validation_error.html"
+                try:
+                    debug_html.write_text(driver.page_source or "", encoding="utf-8")
+                except Exception:
+                    pass
+                print(
+                    "[WARN] eBay reported a validation issue after clicking List it. "
+                    f"Saved page HTML to: {debug_html}"
+                )
+                return False
+
+            if any(phrase in text for phrase in success_phrases):
+                if debug:
+                    print("[INFO] eBay publish confirmation detected.")
+                click_done_after_submit(driver, timeout=12, debug=debug)
+                return True
+
+            if click_done_after_submit(driver, timeout=1, debug=debug):
+                if debug:
+                    print("[INFO] Done button handled after submit.")
+                return True
+
+            if "/itm/" in cur_url and "lstng" not in cur_url.lower():
+                if debug:
+                    print(f"[INFO] eBay item URL detected after listing: {cur_url}")
+                return True
+
+            if "lstng" not in cur_url.lower() and "sell" not in cur_url.lower():
+                if debug:
+                    print(f"[INFO] Left listing editor after submit: {cur_url}")
+                return True
+        except RuntimeError:
+            raise
+        except Exception:
+            pass
+
+        time.sleep(1.0)
+
+    debug_html = Path(__file__).resolve().parent / "debug_list_submit_timeout.html"
+    try:
+        debug_html.write_text(driver.page_source or "", encoding="utf-8")
+    except Exception:
+        pass
+
+    print(
+        "[WARN] Timed out waiting for eBay to confirm listing submission. "
+        f"Current URL: {last_url}. Saved page HTML to: {debug_html}"
+    )
+    return False
+
+
 # ----------------------------
 # Main
 # ----------------------------
@@ -1010,6 +1856,10 @@ def main():
     # Seed selection
     ap.add_argument("--links-json", default="",
                     help="Path to ebay_links.json (default: ./ebay_links.json if exists).")
+    ap.add_argument("--update-links-json", default="",
+                    help="After listing, update this ebay_links.json path if a final item ID is detected.")
+    ap.add_argument("--links-title", default="",
+                    help="Title key to write when --update-links-json is used (default: --title).")
     ap.add_argument("--seed-title", default="",
                     help="Override query used to select seed from links json (default: reduced query from --title).")
     ap.add_argument("--seed-item-id", default="",
@@ -1019,6 +1869,9 @@ def main():
 
     # Brand widget is skipped by default (seed listing should already have correct brand)
     ap.add_argument("--no-brand", action="store_true", help="Skip brand setting (default behavior).")
+    ap.add_argument("--skip-condition", action="store_true", help="Do not try to select Brand New/New condition.")
+    ap.add_argument("--setup-shipping", action="store_true", help="Try to set USPS Media Mail and Free shipping.")
+    ap.add_argument("--ensure-free-shipping", action="store_true", help="Try to check Free shipping.")
 
     ap.add_argument("--timeout", type=int, default=30)
     ap.add_argument("--headless", action="store_true")
@@ -1034,6 +1887,7 @@ def main():
     ap.add_argument("--preview", action="store_true", help="Click Preview/Review (safe).")
     ap.add_argument("--list", dest="do_list", action="store_true", help="Click List it (creates listing).")
     ap.add_argument("--pause", action="store_true", help="Do not click preview/list; keep browser open.")
+    ap.add_argument("--no-wait-exit", action="store_true", help="Do not wait for Enter before closing a visible browser.")
 
     ap.add_argument("--no-delete-photos", action="store_true",
                     help="Do not attempt to delete existing photos before upload.")
@@ -1113,7 +1967,7 @@ def main():
         print("[WARN] Tip: use --seed-title 'Kubota' (or similar) to force a good match, or use --strict-seed to prevent fallback.")
         seed_item_id = DEFAULT_SEED_ITEM_ID
 
-    url = build_sell_similar_url(seed_item_id)
+    url = build_item_url(seed_item_id)
 
     if not args.no_kill_profile:
         kill_chrome_using_profile(profile_dir, debug=args.debug)
@@ -1128,13 +1982,7 @@ def main():
             print(f"[INFO] Profile dir: {profile_dir}")
             print(f"[INFO] Headless: {args.headless}")
 
-        driver.get(url)
-        ensure_logged_in_or_pause(driver)
-        driver.get(url)
-
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-        wait_dom_ready(driver, timeout=25)
-        time.sleep(1.0)
+        open_sell_similar_from_item_page(driver, wait, seed_item_id, debug=args.debug)
 
         if not args.no_delete_photos:
             tiles = find_photo_tiles(driver)
@@ -1168,6 +2016,11 @@ def main():
 
         set_pages_in_description(driver, wait, args.pages, debug=args.debug)
 
+        if not args.skip_condition:
+            if args.debug:
+                print("[INFO] Setting condition: Brand New/New")
+            set_condition_brand_new(driver, wait, debug=args.debug)
+
         price_str = f"{args.price:.2f}"
         if args.debug:
             print(f"[INFO] Setting price: {price_str}")
@@ -1184,16 +2037,55 @@ def main():
         clear_and_type_locator(driver, (By.CSS_SELECTOR, "input[name='majorWeight']"), str(args.lb), debug=args.debug)
         clear_and_type_locator(driver, (By.CSS_SELECTOR, "input[name='minorWeight']"), str(args.oz), debug=args.debug)
 
+        if args.setup_shipping:
+            if args.debug:
+                print("[INFO] Setting shipping: USPS Media Mail + Free shipping")
+            set_shipping_media_mail_free(driver, wait, debug=args.debug)
+        elif args.ensure_free_shipping:
+            if args.debug:
+                print("[INFO] Ensuring Free shipping")
+            if not ensure_free_shipping(driver, debug=args.debug):
+                print("[WARN] Free shipping was not confirmed before submit.")
+            time.sleep(1.5)
+
         if args.pause:
             print("\n[PAUSE] No preview/list click performed. Browser remains open.")
         elif args.do_list:
-            click_list_it(driver, wait, debug=args.debug)
+            before_list_url = driver.current_url or ""
+            click_list_it_with_review_fallback(driver, wait, debug=args.debug)
+            wait_for_possible_redirect(driver, before_list_url, timeout=30, debug=args.debug)
+            published = wait_after_list_submit(driver, timeout=45, debug=args.debug)
+            if not published:
+                print("[WARN] Listing may have remained as a draft; continuing batch.")
             print("\nDone: clicked 'List it'.")
         else:
             click_preview(driver, wait, debug=args.debug)
             print("\nDone: clicked 'Preview/Review' (safe).")
 
-        if not args.headless:
+        final_url = driver.current_url or ""
+        print(f"[INFO] Final URL: {final_url}")
+
+        if args.update_links_json.strip() and args.do_list:
+            item_id = extract_item_id_from_text(final_url)
+            if not item_id:
+                try:
+                    item_id = extract_item_id_from_text(driver.page_source or "")
+                except Exception:
+                    item_id = ""
+
+            if item_id:
+                update_links_json(
+                    Path(args.update_links_json).expanduser().resolve(),
+                    (args.links_title or args.title).strip(),
+                    item_id,
+                    debug=args.debug,
+                )
+            else:
+                print("[WARN] Could not detect created item ID; ebay_links.json was not updated.")
+        elif args.update_links_json.strip():
+            print("[INFO] Preview/pause mode: ebay_links.json was not updated.")
+
+        if not args.headless and not args.no_wait_exit:
             input("\nPress Enter to quit...")
 
     finally:

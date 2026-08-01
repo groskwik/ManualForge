@@ -27,8 +27,8 @@ SMALL_SCREEN = _args.small
 
 # Layout constants – tweak these two lines to taste
 # Normal:  console 15 rows, preview 650 px
-# --small: console  8 rows, preview 380 px
-_CONSOLE_ROWS   = 8  if SMALL_SCREEN else 15
+# --small: console  5 rows, preview 380 px
+_CONSOLE_ROWS   = 5  if SMALL_SCREEN else 15
 _PREVIEW_HEIGHT = 380 if SMALL_SCREEN else 650
 
 # Left-panel width constants
@@ -61,6 +61,8 @@ except ImportError:
 PDF_FOLDERS = [
     r"C:\Users\benoi\Downloads\ebay_manuals",
     r"C:\Users\benoi\Downloads\manuals",
+    r"C:\Users\Admin\Downloads\ebay_manuals",
+    r"C:\Users\Admin\Downloads\manuals",
     r"/home/benoit/Downloads/manuals",
     r"/home/benoit/Downloads/ebay_manuals"
 ]
@@ -730,6 +732,14 @@ window = sg.Window(
 for i in range(1, MAX_TABS + 1):
     window[f"-SEND-{i}-"].bind("<Return>", "_ENTER")
 
+
+def update_pdf_matches(values, value):
+    """Update PDF matches without allowing long filenames to grow the combo."""
+    combo = window["-SEARCHRESULT-"]
+    combo.update(values=values, value=value)
+    combo.Widget.configure(width=_OPT_COMBO_W)
+
+
 # ---------- subprocess I/O ----------
 def stream_reader_char(tab_idx: int, stream, q):
     while True:
@@ -1000,18 +1010,18 @@ def reload_combo_databases(values):
             pdf_values = [os.path.basename(m) for m in current_fuzzy_matches]
             current_pdf_choice = values.get("-SEARCHRESULT-", "")
             pdf_value = current_pdf_choice if current_pdf_choice in pdf_values else pdf_values[0]
-            window["-SEARCHRESULT-"].update(values=pdf_values, value=pdf_value)
+            update_pdf_matches(pdf_values, pdf_value)
             for fullpath in current_fuzzy_matches:
                 if os.path.basename(fullpath) == pdf_value:
                     set_pdf_preview(fullpath, page=1)
                     break
         else:
             current_fuzzy_matches = []
-            window["-SEARCHRESULT-"].update(values=["(no matches)"], value="(no matches)")
+            update_pdf_matches(["(no matches)"], "(no matches)")
             set_pdf_preview(None)
     else:
         current_fuzzy_matches = []
-        window["-SEARCHRESULT-"].update(values=["(no matches)"], value="(no matches)")
+        update_pdf_matches(["(no matches)"], "(no matches)")
         set_pdf_preview(None)
 
     iso_query = values.get("-ISO_SEARCHTXT-", "").strip()
@@ -1144,15 +1154,17 @@ while True:
             matches = fuzzy_find_pdfs(text)
             current_fuzzy_matches = matches
             if matches:
-                window["-SEARCHRESULT-"].update(values=[os.path.basename(m) for m in matches], value=os.path.basename(matches[0]))
+                update_pdf_matches(
+                    [os.path.basename(m) for m in matches], os.path.basename(matches[0])
+                )
                 set_pdf_preview(matches[0], page=1)
             else:
                 current_fuzzy_matches = []
-                window["-SEARCHRESULT-"].update(values=["(no matches)"], value="(no matches)")
+                update_pdf_matches(["(no matches)"], "(no matches)")
                 set_pdf_preview(None)
         else:
             current_fuzzy_matches = []
-            window["-SEARCHRESULT-"].update(values=["(no matches)"], value="(no matches)")
+            update_pdf_matches(["(no matches)"], "(no matches)")
             set_pdf_preview(None)
             
     if event == "-RELOAD_DATABASES-":
@@ -1303,7 +1315,7 @@ while True:
         else:
             run_script(tab_idx, script_path, extra_args=[], auto_inputs=None)
 
-    # NEW: List orders awaiting shipment -> python ebay_scrape.py --headless --stdout-short
+    # Both eBay profiles are authenticated, so scrape without showing Chrome.
     if event == "-LIST_AWAITING-":
         tab_idx = get_active_tab()
         force_console_monospace(tab_idx)

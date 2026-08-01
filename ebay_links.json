@@ -190,7 +190,8 @@
   },
   "Atari 400 Service Manual": {
     "url": "https://www.ebay.com/itm/357675248586",
-    "item_id": "357675248586"
+    "item_id": "357675248586",
+    "typewriter": "True"
   },
   "Brother PE Design 11": {
     "url": "https://www.ebay.com/itm/356088942398",
@@ -221,12 +222,13 @@
     "item_id": "205176209449"
   },
   "hp41c41cv41cx-sm-en": {
-    "url": "https://www.ebay.com/itm/205957210179",
-    "item_id": "205957210179"
+    "url": "https://www.ebay.com/itm/205399513750",
+    "item_id": "205399513750"
   },
   "Sharp PC-G850V": {
     "url": "https://www.ebay.com/itm/204107175092",
-    "item_id": "204107175092"
+    "item_id": "204107175092",
+    "typewriter": "True"
   },
   "Icom IC-705 Advanced": {
     "url": "https://www.ebay.com/itm/357680337145",
@@ -272,11 +274,13 @@
   },
   "dm42": {
     "url": "https://www.ebay.com/itm/204616721925",
-    "item_id": "204616721925"
+    "item_id": "204616721925",
+    "typewriter": "True"
   },
   "dm41x_user_manual": {
     "url": "https://www.ebay.com/itm/204616721235",
-    "item_id": "204616721235"
+    "item_id": "204616721235",
+    "typewriter": "True"
   },
   "hp12cplatinum-sh-en": {
     "url": "https://www.ebay.com/itm/204896414552",
@@ -396,8 +400,8 @@
     "item_id": "357658378201"
   },
   "Canon Powershot SX530 HS": {
-    "url": "https://www.ebay.com/itm/356104228917",
-    "item_id": "356104228917"
+    "url": "https://www.ebay.com/itm/356122871641",
+    "item_id": "356122871641"
   },
   "Nikon coolpix S7000": {
     "url": "https://www.ebay.com/itm/356723584635",
@@ -442,7 +446,8 @@
   },
   "Yaesu FT-991A Transceiver": {
     "url": "https://www.ebay.com/itm/357540771070",
-    "item_id": "357540771070"
+    "item_id": "357540771070",
+    "typewriter": "True"
   },
   "Ricoh GRII ": {
     "url": "https://www.ebay.com/itm/356092344439",
@@ -450,7 +455,8 @@
   },
   "Icom IC-746PRO": {
     "url": "https://www.ebay.com/itm/357641329647",
-    "item_id": "357641329647"
+    "item_id": "357641329647",
+    "typewriter": "True"
   },
   "Olympus E-M5 Mark II": {
     "url": "https://www.ebay.com/itm/357278994948",
@@ -526,7 +532,7 @@
     "url": "https://www.ebay.com/itm/356864637492",
     "item_id": "356864637492"
   },
-  "ppcrom": {
+  "ppcrom-um": {
     "url": "https://www.ebay.com/itm/204582976797",
     "item_id": "204582976797",
     "typewriter": "True"
@@ -575,7 +581,7 @@
     "url": "https://www.ebay.com/itm/358176764001",
     "item_id": "358176764001"
   },
-  "Husqvarna Viking Emerald 116 118 122 Manual - Half-Letter Size": {
+  "Husqvarna Viking Emerald": {
     "url": "https://www.ebay.com/itm/356115348520",
     "item_id": "356115348520"
   },
@@ -613,7 +619,8 @@
   },
   "Tandy 100": {
     "url": "https://www.ebay.com/itm/356690197218",
-    "item_id": "356690197218"
+    "item_id": "356690197218",
+    "typewriter": "True"
   },
   "Apple II Repair Guide": {
     "url": "https://www.ebay.com/itm/357936623804",
@@ -645,7 +652,8 @@
   },
   "Sony DVP-CX995V": {
     "url": "https://www.ebay.com/itm/357707271270",
-    "item_id": "357707271270"
+    "item_id": "357707271270",
+    "typewriter": "True"
   },
   "Tesla Model Y 2025+": {
     "url": "https://www.ebay.com/itm/357539406197",
@@ -669,7 +677,8 @@
   },
   "Tandy Color Computer 1 Service": {
     "url": "https://www.ebay.com/itm/357674282332",
-    "item_id": "357674282332"
+    "item_id": "357674282332",
+    "typewriter": "True"
   },
   "Canon EOS R3": {
     "url": "https://www.ebay.com/itm/356093570301",
@@ -697,7 +706,8 @@
   },
   "Yaesu FT-920": {
     "url": "https://www.ebay.com/itm/357658504321",
-    "item_id": "357658504321"
+    "item_id": "357658504321",
+    "typewriter": "True"
   },
   "Tesla Model Y 2020-2024": {
     "url": "https://www.ebay.com/itm/357539408133",
@@ -994,7 +1004,8 @@
   },
   "Otari MX-80": {
     "url": "https://www.ebay.com/itm/356123098992",
-    "item_id": "356123098992"
+    "item_id": "356123098992",
+    "typewriter": "True"
   },
   "Voicelive Play": {
     "url": "https://www.ebay.com/itm/357431818480",
@@ -1058,7 +1069,8 @@
   },
   "Yaesu FT-857D": {
     "url": "https://www.ebay.com/itm/357555796041",
-    "item_id": "357555796041"
+    "item_id": "357555796041",
+    "typewriter": "True"
   },
   "Husqvarna Viking Designer I": {
     "url": "https://www.ebay.com/itm/356122563411",
@@ -1136,10 +1148,6 @@
     "url": "https://www.ebay.com/itm/356129438458",
     "item_id": "356129438458"
   },
-  "GoPro Hero 5 Black Camera": {
-    "url": "https://www.ebay.com/itm/356122900762",
-    "item_id": "356122900762"
-  },
   "Panasonic DMC- FZ300": {
     "url": "https://www.ebay.com/itm/356150853552",
     "item_id": "356150853552"
@@ -1160,9 +1168,9 @@
     "url": "https://www.ebay.com/itm/356936857235",
     "item_id": "356936857235"
   },
-  "Hewlett Packard HP-65 Calculator Manual – Half-Letter Size": {
-    "url": "https://www.ebay.com/itm/204084045119",
-    "item_id": "204084045119"
+  "Manual for Hewlett Packard HP 15C Calculator half-letter size": {
+    "url": "https://www.ebay.com/itm/206045715765",
+    "item_id": "206045715765"
   },
   "Panasonic GH2": {
     "url": "https://www.ebay.com/itm/356093492051",
@@ -1207,5 +1215,740 @@
   "Panasonic DC-ZS200": {
     "url": "https://www.ebay.com/itm/356093455611",
     "item_id": "356093455611"
+  },
+  "Nikon D3200 reference": {
+    "url": "https://www.ebay.com/itm/356174355755",
+    "item_id": "356174355755"
+  },
+  "Tesla Model X 2021+": {
+    "url": "https://www.ebay.com/itm/356104816998",
+    "item_id": "356104816998"
+  },
+  "hp20b30b-ug-en": {
+    "url": "https://www.ebay.com/itm/204889267360",
+    "item_id": "204889267360"
+  },
+  "Phase One P40+": {
+    "url": "https://www.ebay.com/itm/357660461044",
+    "item_id": "357660461044"
+  },
+  "Brother LX3817": {
+    "url": "https://www.ebay.com/itm/357539510001",
+    "item_id": "357539510001"
+  },
+  "Humminbird HELIX 9": {
+    "url": "https://www.ebay.com/itm/356122553276",
+    "item_id": "356122553276"
+  },
+  "Math pac manual for Hewlett Packard HP 41CV calculator module - half letter": {
+    "url": "https://www.ebay.com/itm/203805343736",
+    "item_id": "203805343736"
+  },
+  "Nikon D810": {
+    "url": "https://www.ebay.com/itm/356092268107",
+    "item_id": "356092268107"
+  },
+  "Nikon D3": {
+    "url": "https://www.ebay.com/itm/357555870360",
+    "item_id": "357555870360"
+  },
+  "hp46hp81-sm-en": {
+    "url": "https://www.ebay.com/itm/205776103472",
+    "item_id": "205776103472"
+  },
+  "hp48g-aur-en": {
+    "url": "https://www.ebay.com/itm/204628731768",
+    "item_id": "204628731768"
+  },
+  "Structural pac manual for Hewlett Packard HP 41CV calculator module": {
+    "url": "https://www.ebay.com/itm/204888912134",
+    "item_id": "204888912134"
+  },
+  "hp37e38e-invest-en": {
+    "url": "https://www.ebay.com/itm/204580964589",
+    "item_id": "204580964589"
+  },
+  "Olivetti M10 Operations Guide": {
+    "url": "https://www.ebay.com/itm/358541196618",
+    "item_id": "358541196618"
+  },
+  "Lowrance Hook 2X Series": {
+    "url": "https://www.ebay.com/itm/356138143938",
+    "item_id": "356138143938"
+  },
+  "Hp solve Equation Library Application Card owner manual for HP 48SX Calculator": {
+    "url": "https://www.ebay.com/itm/204848173615",
+    "item_id": "204848173615"
+  },
+  "Numworks manual": {
+    "url": "https://www.ebay.com/itm/205403877494",
+    "item_id": "205403877494"
+  },
+  "Icom IC-7300 Full": {
+    "url": "https://www.ebay.com/itm/357639695764",
+    "item_id": "357639695764"
+  },
+  "Husqvarna Viking Designer Epic 2": {
+    "url": "https://www.ebay.com/itm/357555583288",
+    "item_id": "357555583288"
+  },
+  "Icom IC-7300 Basic Manual & Service Manual & Full Manual on CD": {
+    "url": "https://www.ebay.com/itm/357910515251",
+    "item_id": "357910515251"
+  },
+  "Hewlett Packard HP-16C Calculator Manual – Half-Letter Size": {
+    "url": "https://www.ebay.com/itm/204980801578",
+    "item_id": "204980801578"
+  },
+  "Icom IC-756PRO II service manual": {
+    "url": "https://www.ebay.com/itm/357951143292",
+    "item_id": "357951143292"
+  },
+  "Casio WK1800": {
+    "url": "https://www.ebay.com/itm/357689497242",
+    "item_id": "357689497242"
+  },
+  "PFAFF creative Icon 2": {
+    "url": "https://www.ebay.com/itm/356122805343",
+    "item_id": "356122805343"
+  },
+  "Yamaha DGX-670": {
+    "url": "https://www.ebay.com/itm/356150861716",
+    "item_id": "356150861716"
+  },
+  "Phase One XF IQ4": {
+    "url": "https://www.ebay.com/itm/357660486278",
+    "item_id": "357660486278"
+  },
+  "Nikon Coolpix W300": {
+    "url": "https://www.ebay.com/itm/357540788360",
+    "item_id": "357540788360"
+  },
+  "Brother SE625": {
+    "url": "https://www.ebay.com/itm/357555356104",
+    "item_id": "357555356104"
+  },
+  "Brother SE2000": {
+    "url": "https://www.ebay.com/itm/356428005724",
+    "item_id": "356428005724"
+  },
+  "Blackmagic URSA Mini_mod": {
+    "url": "https://www.ebay.com/itm/356108039996",
+    "item_id": "356108039996"
+  },
+  "Sony A330": {
+    "url": "https://www.ebay.com/itm/357851541037",
+    "item_id": "357851541037",
+    "typewriter": "True"
+  },
+  "hp42s-elec-en": {
+    "url": "https://www.ebay.com/itm/204888764439",
+    "item_id": "204888764439",
+    "typewriter": "True"
+  },
+  "hp15c-limited-oh-en": {
+    "url": "https://www.ebay.com/itm/204628719148",
+    "item_id": "204628719148",
+    "typewriter": "True"
+  },
+  "Stat pac manual for Hewlett Packard HP 41CV calculator module": {
+    "url": "https://www.ebay.com/itm/203805330619",
+    "item_id": "203805330619"
+  },
+  "hp28hp48-discover-calculus": {
+    "url": "https://www.ebay.com/itm/204848155657",
+    "item_id": "204848155657"
+  },
+  "Aviation pac manual for Hewlett Packard HP 41CV calculator module": {
+    "url": "https://www.ebay.com/itm/203805326176",
+    "item_id": "203805326176"
+  },
+  "Tandy Color Computer 2 Service": {
+    "url": "https://www.ebay.com/itm/357658509597",
+    "item_id": "357658509597"
+  },
+  "Hasselblad X2D 100C": {
+    "url": "https://www.ebay.com/itm/357621943672",
+    "item_id": "357621943672"
+  },
+  "TI Voyage 200 guidebook": {
+    "url": "https://www.ebay.com/itm/205394478808",
+    "item_id": "205394478808"
+  },
+  "hp71-sm-en": {
+    "url": "https://www.ebay.com/itm/205397583234",
+    "item_id": "205397583234"
+  },
+  "Kenwood TS-940S Service & Instruction Manuals; w": {
+    "url": "https://www.ebay.com/itm/358693821864",
+    "item_id": "358693821864"
+  },
+  "Yaesu FT-736R Service & Instruction Manuals": {
+    "url": "https://www.ebay.com/itm/358694028946",
+    "item_id": "358694028946"
+  },
+  "Kenwood TS-711A/E Instruction Manual - Premium Card Stock Covers & 32 LB Paper!": {
+    "url": "https://www.ebay.com/itm/356000141682",
+    "item_id": "356000141682"
+  },
+  "Yaesu FT-100D Instruction Manual - Premium Card Stock Covers & 32 LB Paper!": {
+    "url": "https://www.ebay.com/itm/356000141682",
+    "item_id": "356000141682"
+  },
+  "Yaesu FT-101ZD Instruction & Service Manuals": {
+    "url": "https://www.ebay.com/itm/358694057437",
+    "item_id": "358694057437"
+  },
+  "Collins 30L-1 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/358694341292",
+    "item_id": "358694341292"
+  },
+  "Tandy Color Computer 3 Extended Basic": {
+    "url": "https://www.ebay.com/itm/357674293886",
+    "item_id": "357674293886"
+  },
+  "Tandy Color Computer 3 Service": {
+    "url": "https://www.ebay.com/itm/357658389726",
+    "item_id": "357658389726"
+  },
+  "Icom IC-R8500 Instruction Manual -Premium Card Stock & Protective Covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-700S/TS-700SP Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-2300H Instruction Manual - Premium Card Stock Covers & 28 LB Paper!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-745 Instruction manual - Premium Card Stock Covers & 32lb Paper!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FRG-7700 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-830S Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FT-900 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-520S Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FT-107M Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Collins 30S-1 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Tektronix 577-177 D1 or D2 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-140S Service & Instruction Manuals": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-930S Service Manual - With Protective Covers": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-7100 Basic Instruction Manual - Card Stock & Protective Covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Tektronix 2465 Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Collins KWM-380 Instruction Manual - Premium Card Stock Covers & In Color!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Collins 312B-4 & 312B-5 Instruction Manual - 110lb Card Stock/Plastic Covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FT-890 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-520 Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood R-5000 Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FTdx10 Operation Manual - Full Color & Protective Covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Johnson Viking Ranger II instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-756 Instruction Manual - Premium Card Stock & Protective Covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-7200 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Drake TR-4CW Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-480HX/480SAT Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-R9500 Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-R71A Instruction manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "MFJ 464 Memory Keyer Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-140S Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-7200 Advanced Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Ameritron AL-80A Instruction Manual - ring bound with protective covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Hickok 800 Instruction Manual & Tube Charts": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-870S Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Tektronix 2465A/2455A/2445A Operators Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-140S Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood AT-250 Service & Instruction Manuals - Card Stock Covers & 28lb Paper": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FT-101ZD Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Atlas 210x / 215X Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FT-221/FT-221R Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Collins KWM-1 Instruction manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "National HRO-500 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Collins 51J-4 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Ameritron AL-80B Instruction Manual - ring bound with protective covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "2019-2023 Polaris RZR XP 1000 Service Manual": {
+    "url": "https://www.ebay.com/itm/358706449660",
+    "item_id": "358706449660"
+  },
+  "Pentax K-70": {
+    "url": "https://www.ebay.com/itm/356122884920",
+    "item_id": "356122884920"
+  },
+  "TI-84 Plus CE Getting Started": {
+    "url": "https://www.ebay.com/itm/204968594594",
+    "item_id": "204968594594"
+  },
+  "Olympus E-M1": {
+    "url": "https://www.ebay.com/itm/357344005142",
+    "item_id": "357344005142"
+  },
+  "Nikon D3000 user's manual": {
+    "url": "https://www.ebay.com/itm/356174419669",
+    "item_id": "356174419669"
+  },
+  "hp71-om-en": {
+    "url": "https://www.ebay.com/itm/204547356761",
+    "item_id": "204547356761"
+  },
+  "Icom IC-735 Instruction manual": {
+    "url": "https://www.ebay.com/itm/356000141682",
+    "item_id": "356000141682"
+  },
+  "Icom IC-271A/E/H Service Manual": {
+    "url": "https://www.ebay.com/itm/356000141682",
+    "item_id": "356000141682"
+  },
+  "Yaesu FT-757GX II Instruction Manual": {
+    "url": "https://www.ebay.com/itm/356000141682",
+    "item_id": "356000141682"
+  },
+  "Icom IC-730 Instruction manual": {
+    "url": "https://www.ebay.com/itm/356000141682",
+    "item_id": "356000141682"
+  },
+  "Kenwood TS-130S Instruction Manual": {
+    "url": "https://www.ebay.com/itm/356000141682",
+    "item_id": "356000141682"
+  },
+  "Kenwood SM-230 Service & Instruction Manuals": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Tektronix 2246 Mod A Operators Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-530SP Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Tektronix 2235 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Drake TR-4 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "MFJ 993B Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Drake 2-C Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Realistic DX-302 Owner's Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "JRC NRD-525 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TM-281A/E Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-910H Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Tektronix 2247A Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Uniden SDS200 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-251A Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Tektronix 2236 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Tektronix 453 Operation & Maintenance Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TM-D700A/E Instruction Manual - Protective Covers & Coil Bound!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "AOR AR5000 Operating Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-765 Instruction manual - Premium Card Stock & Protective Covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "ICOM IC-V8000 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-520 Service & Instruction Manuals": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-520SE Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Dentron Clipperton-L Instruction Manual - Comb bound with protective covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FRG-8800 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FT-817 Technical Supplement": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Swan 250 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FRG-7000 Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Drake SPR-4 Technical Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-208H Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "B&K Dyna-Quick 700 Tube Tester Instruction Manual & Tube Charts": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu YO-100 Instruction manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-590S Service & Instruction Manuals": {
+    "url": "https://www.ebay.com/itm/358736276676",
+    "item_id": "358736276676"
+  },
+  "Collins 75S-3 Instruction manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu FT-450D Technical Supplement": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "MFJ 998 Auto Antenna Tuner Instruction Manual": {
+    "url": "https://www.ebay.com/itm/204582438943",
+    "item_id": "204582438943"
+  },
+  "Drake R-7 Service Manual - Premium Card Stock & Protective Covers!": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Yaesu VX-8DR / DE Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Kenwood TS-890S Instruction Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Swan 100MX Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Icom IC-781 Service Manual": {
+    "url": "https://www.ebay.com/itm/800001484720",
+    "item_id": "800001484720"
+  },
+  "Lowrance HDS Gen 2": {
+    "url": "https://www.ebay.com/itm/357349274267",
+    "item_id": "357349274267"
+  },
+  "Nikon D7200": {
+    "url": "https://www.ebay.com/itm/356091999592",
+    "item_id": "356091999592"
+  },
+  "Hewlett Packard HP-42S Calculator Manual – Half-Letter Size": {
+    "url": "https://www.ebay.com/itm/204668168465",
+    "item_id": "204668168465"
+  },
+  "Brother SE630": {
+    "url": "https://www.ebay.com/itm/357540732680",
+    "item_id": "357540732680"
+  },
+  "Kenwood TS-440S Instruction & Service Manual": {
+    "url": "https://www.ebay.com/itm/358694139647",
+    "item_id": "358694139647"
+  },
+  "Hasselblad X1D 50C": {
+    "url": "https://www.ebay.com/itm/357660492198",
+    "item_id": "357660492198"
+  },
+  "Icom IC-7610 Advanced Instruction Manual": {
+    "url": "https://www.ebay.com/itm/358751955902",
+    "item_id": "358751955902"
+  },
+  "Panasonic DC-ZS70": {
+    "url": "https://www.ebay.com/itm/356093453487",
+    "item_id": "356093453487"
+  },
+  "Canon PowerShot ELPH 360": {
+    "url": "https://www.ebay.com/itm/356885849960",
+    "item_id": "356885849960"
+  },
+  "Canon Selphy CP1500": {
+    "url": "https://www.ebay.com/itm/356580481296",
+    "item_id": "356580481296"
+  },
+  "Yaesu FT-891 Transceiver": {
+    "url": "https://www.ebay.com/itm/356123048381",
+    "item_id": "356123048381"
+  },
+  "tds-48gx-surveypro-um": {
+    "url": "https://www.ebay.com/itm/204582438943",
+    "item_id": "204582438943"
+  },
+  "tds-48gx-surveying-um": {
+    "url": "https://www.ebay.com/itm/204084087497",
+    "item_id": "204084087497"
+  },
+  "Kodak Pixpro AZ421": {
+    "url": "https://www.ebay.com/itm/356104784234",
+    "item_id": "356104784234"
+  },
+  "Husqvarna Viking Designer Epic": {
+    "url": "https://www.ebay.com/itm/356122825307",
+    "item_id": "356122825307"
+  },
+  "Icom IC-735 service manual": {
+    "url": "https://www.ebay.com/itm/358719134927",
+    "item_id": "358719134927"
+  },
+  "Kenwood TS-850S Instruction Manual": {
+    "url": "https://www.ebay.com/itm/358694341308",
+    "item_id": "358694341308"
+  },
+  "Kodak Pixpro AZ425": {
+    "url": "https://www.ebay.com/itm/356885812772",
+    "item_id": "356885812772"
+  },
+  "DL-PASCAL for the PB-2000 user's guide - Half letter size": {
+    "url": "https://www.ebay.com/itm/206368208883",
+    "item_id": "206368208883"
+  },
+  "HP-41CX Owner's Manual Volume 1 & 2": {
+    "url": "https://www.ebay.com/itm/205739050008",
+    "item_id": "205739050008"
+  },
+  "Full 3 Manual Set. Brother Luminaire Innov-is XP3": {
+    "url": "https://www.ebay.com/itm/356085324888",
+    "item_id": "356085324888"
+  },
+  "Swan 500CX Instruction Manual": {
+    "url": "https://www.ebay.com/itm/358694638446",
+    "item_id": "358694638446"
+  },
+  "Nikon D5100": {
+    "url": "https://www.ebay.com/itm/356104705509",
+    "item_id": "356104705509"
+  },
+  "2020-2024 Polaris Ranger 1000 Service Manual": {
+    "url": "https://www.ebay.com/itm/358706498952",
+    "item_id": "358706498952"
+  },
+  "Nikon CoolPix P900": {
+    "url": "https://www.ebay.com/itm/356167966216",
+    "item_id": "356167966216"
+  },
+  "Leica SL": {
+    "url": "https://www.ebay.com/itm/356121003395",
+    "item_id": "356121003395"
+  },
+  "Canon XA70 XA75": {
+    "url": "https://www.ebay.com/itm/356117246276",
+    "item_id": "356117246276"
+  },
+  "Panasonic DMC- FZ1000M2": {
+    "url": "https://www.ebay.com/itm/356092381899",
+    "item_id": "356092381899"
+  },
+  "Sony PMW-F55": {
+    "url": "https://www.ebay.com/itm/356120966769",
+    "item_id": "356120966769"
+  },
+  "Sony a6700": {
+    "url": "https://www.ebay.com/itm/358713635825",
+    "item_id": "358713635825"
+  },
+  "Fujifilm X-T50": {
+    "url": "https://www.ebay.com/itm/356352307467",
+    "item_id": "356352307467"
+  },
+  "hp50g-aur-en": {
+    "url": "https://www.ebay.com/itm/204164025991",
+    "item_id": "204164025991"
+  },
+  "Siltronix 1011D Operation Manual": {
+    "url": "https://www.ebay.com/itm/358694341287",
+    "item_id": "358694341287"
+  },
+  "Kenwood TS-570S TS-570D Instruction manual": {
+    "url": "https://www.ebay.com/itm/358694144920",
+    "item_id": "358694144920"
+  },
+  "Circuit analysis pac manual for Hewlett Packard HP 41CV calculator module": {
+    "url": "https://www.ebay.com/itm/204889429594",
+    "item_id": "204889429594"
+  },
+  "Husqvarna Viking Emerald 116 118 122 Manual - Half-Letter Size": {
+    "url": "https://www.ebay.com/itm/357895045722",
+    "item_id": "357895045722"
+  },
+  "Fostex MR16": {
+    "url": "https://www.ebay.com/itm/356885962987",
+    "item_id": "356885962987"
+  },
+  "Kenwood TS-2000 Service Manual": {
+    "url": "https://www.ebay.com/itm/357639675838",
+    "item_id": "357639675838"
+  },
+  "Kenwood TS-940S Service Manual": {
+    "url": "https://www.ebay.com/itm/358694341297",
+    "item_id": "358694341297"
+  },
+  "Kenwood SM-220 Service & Instruction Manuals": {
+    "url": "https://www.ebay.com/itm/358694341293",
+    "item_id": "358694341293"
   }
 }
