@@ -3,6 +3,16 @@ awaiting_shipment*.csv
 3covers*
 chrome_profile_selenium/
 chrome_profile_selenium_2/
+chrome_profile_selenium2/
+__pycache__/
+
+# Generated eBay and competitor-analysis exports kept only on this machine.
+eBay-OrdersReport-*.csv
+ebay_orders_summary.*
+ebay_compare_decisions.json
+kndmeredith_*
+lacey_communications_*
+temp
 build/
 dist/
 manualforge.exe
