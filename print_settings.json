@@ -980,5 +980,10 @@
   ],
   "zenith trans-oceanic royal d7000 service manual": [
     "monochrome,1-16,duplex,fit,paper=letter"
+  ],
+  "sharp pc-1600": [
+    "color,1,simplex,fit,paper=letter",
+    "monochrome,2,simplex,fit,paper=letter",
+    "monochrome,3-380,duplex,fit,paper=letter"
   ]
 }
