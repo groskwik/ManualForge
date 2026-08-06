@@ -985,5 +985,8 @@
     "color,1,simplex,fit,paper=letter",
     "monochrome,2,simplex,fit,paper=letter",
     "monochrome,3-380,duplex,fit,paper=letter"
+  ],
+  "manual for hewlett packard hp 42s calculator programming examples & techniques": [
+    "color,1-120,duplexshort,fit,paper=letter,landscape"
   ]
 }
