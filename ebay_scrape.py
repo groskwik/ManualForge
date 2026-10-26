@@ -10,6 +10,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -23,6 +24,7 @@ from selenium.common.exceptions import StaleElementReferenceException
 
 AWAITING_URL = "https://www.ebay.com/sh/ord/?filter=status:AWAITING_SHIPMENT"
 ALL_ORDERS_URL = "https://www.ebay.com/sh/ord/?filter=status:ALL_ORDERS"
+SHIPPED_URL = "https://www.ebay.com/sh/ord/?filter=status:PAID_SHIPPED"
 
 RE_ORDER_FULL = re.compile(r"^\d{2}-\d{5}-\d{5}$")   # e.g. 27-13984-70927
 RE_AVAILABLE = re.compile(r"\((\d+)\s+available\)", re.IGNORECASE)
@@ -138,7 +140,102 @@ def safe_find_text(root, by, sel) -> str:
         return ""
 
 
-def scrape_orders(driver, timeout=30, max_items=500, debug=False):
+def parse_since(value: str) -> date:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        raise argparse.ArgumentTypeError("Use a date in YYYY-MM-DD format (for example, 2026-10-10).")
+
+
+def parse_shipped_date(text: str, today: date | None = None) -> date | None:
+    """Parse a shipping-date field, including eBay's dates without a year."""
+    today = today or date.today()
+    text = " ".join((text or "").replace("\u00a0", " ").split())
+    if re.search(r"\btoday\b", text, re.IGNORECASE):
+        return today
+    if re.search(r"\byesterday\b", text, re.IGNORECASE):
+        return today - timedelta(days=1)
+
+    patterns = [
+        (r"\b\d{4}-\d{2}-\d{2}\b", ["%Y-%m-%d"]),
+        (r"\b[A-Za-z]{3,9}\.?\s+\d{1,2}(?:,?\s+\d{4})?\b",
+         ["%b %d %Y", "%B %d %Y", "%b %d", "%B %d"]),
+        (r"\b\d{1,2}\s+[A-Za-z]{3,9}\.?(?:,?\s+\d{4})?\b",
+         ["%d %b %Y", "%d %B %Y", "%d %b", "%d %B"]),
+        (r"\b\d{1,2}/\d{1,2}/\d{4}\b", ["%m/%d/%Y"]),
+    ]
+    for pattern, formats in patterns:
+        for match in re.finditer(pattern, text):
+            value = match.group(0).replace(",", "").replace(".", "")
+            for fmt in formats:
+                try:
+                    parsed = datetime.strptime(value, fmt).date()
+                    if "%Y" not in fmt:
+                        parsed = parsed.replace(year=today.year)
+                        if parsed > today:
+                            parsed = parsed.replace(year=today.year - 1)
+                    return parsed
+                except ValueError:
+                    continue
+    return None
+
+
+def extract_shipped_date(row) -> date | None:
+    # Prefer a dedicated shipment-date field, never the sold/paid date.
+    for field in row.find_elements(By.CSS_SELECTOR,
+                                   "[class*='shipped-date'], [class*='shippedDate'], "
+                                   "[class*='shipping-date'], [class*='shipment-date']"):
+        parsed = parse_shipped_date(field.text)
+        if parsed:
+            return parsed
+
+    # Keep line boundaries so another column's date cannot be mistaken for shipping.
+    lines = [line.strip() for line in (row.text or "").splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        label = re.search(r"^(?:shipped(?:\s+on)?|ship(?:ped|ping|ment)?\s+date)\b[:\s-]*(.*)",
+                          line, re.IGNORECASE)
+        if not label:
+            continue
+        value = label.group(1)
+        parsed = parse_shipped_date(value)
+        if parsed:
+            return parsed
+        if not value and index + 1 < len(lines):
+            parsed = parse_shipped_date(lines[index + 1])
+            if parsed:
+                return parsed
+    return None
+
+
+def shipment_date_from_details(driver, order_full, timeout=30, headless=True):
+    """Delivered/returned rows hide the shipping date; read the order timeline."""
+    original_window = driver.current_window_handle
+    driver.switch_to.new_window("tab")
+    try:
+        driver.get(f"https://www.ebay.com/mesh/ord/details?orderid={order_full}")
+        ensure_logged_in_or_pause(driver, headless=headless)
+        WebDriverWait(driver, timeout).until(
+            lambda d: order_full in d.find_element(By.TAG_NAME, "body").text
+        )
+        return extract_shipped_date(driver.find_element(By.TAG_NAME, "body"))
+    finally:
+        driver.close()
+        driver.switch_to.window(original_window)
+
+
+def order_context_row(row):
+    """Multi-item purchases have separate item rows beneath the order header."""
+    row_id = row.get_attribute("id") or ""
+    match = re.match(r"orderid_(\d{2}-\d{5}-\d{5})__item-info", row_id)
+    if match:
+        return row.find_element(
+            By.XPATH, f"./preceding-sibling::tr[@id='orderid_{match.group(1)}__order-info'][1]"
+        )
+    return row
+
+
+def scrape_orders(driver, timeout=30, max_items=500, debug=False, since=None, shipped=False,
+                  headless=True):
     wait = WebDriverWait(driver, timeout)
     wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
@@ -182,23 +279,31 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
                 continue
 
             # order number anchor
+            context_row = order_context_row(row)
             order_full = ""
             try:
-                order_el = row.find_element(
+                order_links = context_row.find_elements(
                     By.XPATH,
                     ".//a[contains(@href,'/mesh/ord/details') and contains(normalize-space(.),'-')]"
                 )
-                cand = (order_el.text or "").strip()
-                if RE_ORDER_FULL.match(cand):
-                    order_full = cand
+                for order_el in order_links:
+                    cand = (order_el.text or "").strip()
+                    if RE_ORDER_FULL.fullmatch(cand):
+                        order_full = cand
+                        break
             except Exception:
                 try:
                     # fallback: search any text in the row matching full order pattern
-                    m = RE_ORDER_FULL.search(row_text)
+                    m = re.search(r"\b\d{2}-\d{5}-\d{5}\b", row_text)
                     if m:
                         order_full = m.group(0)
                 except Exception:
                     order_full = ""
+
+            if not order_full:
+                m = re.search(r"\b\d{2}-\d{5}-\d{5}\b", context_row.text or "")
+                if m:
+                    order_full = m.group(0)
 
             order_short = extract_short_order(order_full) if order_full else None
 
@@ -244,7 +349,32 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
 
             price = parse_price(price_text)
 
-            rows.append({
+            shipped_date = extract_shipped_date(context_row) if shipped else None
+            if since:
+                if shipped_date is None:
+                    # Delivery before the cutoff implies shipment before it too.
+                    # This avoids loading details for all older delivered orders.
+                    status = safe_find_text(context_row, By.CSS_SELECTOR, ".order-status")
+                    if re.match(r"^Delivered\b", status, re.IGNORECASE):
+                        delivered_date = parse_shipped_date(status)
+                        if delivered_date and delivered_date < since:
+                            continue
+                    if order_full:
+                        if debug:
+                            print(f"[INFO] Reading shipment timeline for {order_full}")
+                        shipped_date = shipment_date_from_details(
+                            driver, order_full, timeout=timeout, headless=headless
+                        )
+                if shipped_date is None:
+                    raise RuntimeError(
+                        f"Cannot read the shipment date for order {order_full or item_id}. "
+                        "Stopping rather than producing an incomplete date-filtered export. "
+                        "Check the Shipped page's date fields in a visible browser."
+                    )
+                if shipped_date < since:
+                    continue
+
+            record = {
                 "order_number": order_short or "",
                 "order_full": order_full or "",
                 "item_id": item_id or "",
@@ -254,7 +384,10 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
                 "qty_available": "" if qty_avail is None else str(qty_avail),
                 "price": "" if price is None else f"{price:.2f}",
                 "price_text": price_text or "",
-            })
+            }
+            if shipped:
+                record["shipped_date"] = shipped_date.isoformat() if shipped_date else ""
+            rows.append(record)
 
             if len(rows) >= max_items:
                 break
@@ -263,6 +396,50 @@ def scrape_orders(driver, timeout=30, max_items=500, debug=False):
             continue
 
     return rows
+
+
+def scrape_shipped_pages(driver, args):
+    rows = []
+    seen = set()
+    visited_pages = set()
+    while True:
+        page_rows = scrape_orders(driver, timeout=args.timeout, max_items=sys.maxsize,
+                                  debug=args.debug, since=args.since, shipped=True,
+                                  headless=args.headless)
+        # Include all item links, even when no rows on this page pass the date filter.
+        signature = tuple((el.get_attribute("href"), el.text) for el in
+                          driver.find_elements(By.XPATH,
+                                               "//a[contains(@href,'/itm/') or contains(@href,'/mesh/ord/details')]"))
+        if signature in visited_pages:
+            raise RuntimeError("Shipped-order pagination repeated a page; export stopped.")
+        visited_pages.add(signature)
+        for row in page_rows:
+            key = tuple(row.items())
+            if key not in seen:
+                seen.add(key)
+                rows.append(row)
+                if len(rows) >= args.max_items:
+                    print(f"[INFO] Reached --max-items={args.max_items}; remaining shipped orders were not read.")
+                    return rows
+
+        next_buttons = driver.find_elements(
+            By.CSS_SELECTOR,
+            "a.pagination__next, button.pagination__next, "
+            "a[rel='next'], button[aria-label='Next page'], a[aria-label='Next page'], "
+            "button[aria-label='Go to next page'], a[aria-label='Go to next page']"
+        )
+        next_button = next((button for button in next_buttons
+                            if button.is_displayed() and button.is_enabled()
+                            and button.get_attribute("aria-disabled") != "true"
+                            and button.get_attribute("disabled") is None), None)
+        if next_button is None:
+            return rows
+        old_body_text = driver.find_element(By.TAG_NAME, "body").text
+        next_button.click()
+        WebDriverWait(driver, args.timeout).until(
+            lambda d: d.find_element(By.TAG_NAME, "body").text != old_body_text
+        )
+        ensure_logged_in_or_pause(driver, headless=args.headless)
 
 
 def filter_out_phantom_rows(rows):
@@ -482,7 +659,10 @@ def scrape_account(account: AccountSpec, url: str, args) -> list[dict]:
         ensure_logged_in_or_pause(driver, headless=args.headless)
         driver.get(url)
 
-        rows = scrape_orders(driver, timeout=args.timeout, max_items=args.max_items, debug=args.debug)
+        if args.shipped:
+            rows = scrape_shipped_pages(driver, args)
+        else:
+            rows = scrape_orders(driver, timeout=args.timeout, max_items=args.max_items, debug=args.debug)
         rows = filter_out_phantom_rows(rows)
 
         for r in rows:
@@ -498,8 +678,13 @@ def scrape_account(account: AccountSpec, url: str, args) -> list[dict]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--all-orders", action="store_true",
+    selection = ap.add_mutually_exclusive_group()
+    selection.add_argument("--all-orders", action="store_true",
                     help="Scrape ALL_ORDERS instead of AWAITING_SHIPMENT (default).")
+    selection.add_argument("--shipped", action="store_true",
+                           help="Scrape paid and shipped orders, following all result pages up to --max-items.")
+    ap.add_argument("--since", type=parse_since,
+                    help="With --shipped, keep shipment dates on or after YYYY-MM-DD (inclusive).")
     ap.add_argument("--headless", action="store_true",
                     help="Run without showing Chrome. Use only after you have a valid logged-in profile.")
     ap.add_argument("--stdout-short", action="store_true",
@@ -529,7 +714,11 @@ def main():
 
     args = ap.parse_args()
 
-    url = ALL_ORDERS_URL if args.all_orders else AWAITING_URL
+    if args.since and not args.shipped:
+        ap.error("--since requires --shipped (the date is the shipment date).")
+    if args.max_items < 1:
+        ap.error("--max-items must be at least 1.")
+    url = SHIPPED_URL if args.shipped else (ALL_ORDERS_URL if args.all_orders else AWAITING_URL)
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -567,8 +756,12 @@ def main():
         "price_text",
     ]
     headers = preferred
+    if args.shipped:
+        headers = preferred + ["shipped_date"]
 
-    page_tag = "all_orders" if args.all_orders else "awaiting_shipment"
+    page_tag = "shipped" if args.shipped else ("all_orders" if args.all_orders else "awaiting_shipment")
+    if args.since:
+        page_tag += f"_since_{args.since.isoformat()}"
     csv_name = (
         f"{page_tag}_items.csv"
         if args.account == "both"
@@ -591,10 +784,15 @@ def main():
     if combined_rows:
         archived = write_csv(combined_rows, out_csv, headers=headers)
 
-    print(f"\nSaved CSV: {out_csv}")
+    if combined_rows:
+        print(f"\nSaved CSV: {out_csv}")
+    else:
+        print("\nNo matching rows; no CSV written.")
     if archived:
         print(f"Previous CSV archived as: {archived}")
     print(f"Rows kept: {len(combined_rows)}")
+    if args.since:
+        print(f"Shipment date filter: {args.since.isoformat()} or later (inclusive).")
 
     if not args.no_manual_filter:
         print("Filter applied: title contains 'manual(s)' or 'guide(s)' or 'handbook(s)' (case-insensitive).")
