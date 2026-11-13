@@ -512,6 +512,13 @@ col_left_options = [
         key="-RELOAD_DATABASES-",
         size=(_OPT_BTN_W, 1),
         pad=((0, 0), (10, 0))
+    )],
+    [sg.Text("Delay:", tooltip="Delay in minutes before Print manual starts printing")],
+    [sg.Input(
+        key="-PRINT_DELAY_MINUTES-",
+        size=(8, 1),
+        default_text="",
+        tooltip="Print manual only: wait this many minutes after page range is answered, before printing starts",
     )]
 
 ]
@@ -528,11 +535,44 @@ col_mid_options = [
         pad=((0, 0), (8, 0)),
     )],
     [sg.Checkbox(
+        "Quiet second pass",
+        key="-QUIET_SECOND_PASS-",
+        default=False,
+        tooltip="Print manual / Print360: use a matching Quiet printer for the manual second pass if installed",
+    )],
+    [sg.Checkbox(
         "Second pass",
         key="-SECONDPASS-",
         default=False,
         tooltip="Run only the odd-page second pass for Print manual, Print360, or Print720",
     )],
+    [sg.Text("Print720 modes:", pad=((0, 0), (12, 0)))],
+    [
+        sg.Text("Printer 1", size=(8, 1)),
+        sg.Combo(
+            ["Regular duplex", "Manual 2-sided / regular 2nd pass", "Manual 2-sided / quiet 2nd pass"],
+            default_value="Regular duplex",
+            key="-PRINT720_P1_MODE-",
+            size=(34, 1),
+            readonly=True,
+            background_color="white",
+            text_color="black",
+            tooltip="How Print720 should use printer 1",
+        ),
+    ],
+    [
+        sg.Text("Printer 2", size=(8, 1)),
+        sg.Combo(
+            ["Regular duplex", "Manual 2-sided / regular 2nd pass", "Manual 2-sided / quiet 2nd pass"],
+            default_value="Manual 2-sided / regular 2nd pass",
+            key="-PRINT720_P2_MODE-",
+            size=(34, 1),
+            readonly=True,
+            background_color="white",
+            text_color="black",
+            tooltip="How Print720 should use printer 2",
+        ),
+    ],
     [sg.Text("Preview page:", pad=((0, 0), (16, 0)))],
     [
         sg.Combo(
@@ -1315,7 +1355,7 @@ while True:
         else:
             run_script(tab_idx, script_path, extra_args=[], auto_inputs=None)
 
-    # Both eBay profiles are authenticated, so scrape without showing Chrome.
+    # Scrape all three eBay stores without showing Chrome.
     if event == "-LIST_AWAITING-":
         tab_idx = get_active_tab()
         force_console_monospace(tab_idx)
@@ -1324,7 +1364,7 @@ while True:
             output_queues[tab_idx].put(f"ERROR: {script_path} not found\n")
             window["-STATUS-"].update(f"Tab {tab_idx}: ERROR: script not found")
         else:
-            run_python_cmd(tab_idx, [SCRAPE_SCRIPT, "--headless", "--stdout-short"], "Listing awaiting shipment")
+            run_python_cmd(tab_idx, [SCRAPE_SCRIPT, "--account", "all", "--headless", "--stdout-short"], "Listing awaiting shipment")
 
     if event == "-PRINT720-":
         tab_idx = get_active_tab()
@@ -1350,11 +1390,40 @@ while True:
                 "--printer", prn1,
                 "--printer2", prn2,
             ]
-            if values.get("-MANUAL2SIDED-", False) or values.get("-SECONDPASS-", False):
+            mode_for_printer = {
+                "1": "manual2sided" if values.get("-PRINT720_P1_MODE-", "").startswith("Manual 2-sided") else "regular",
+                "2": "manual2sided" if values.get("-PRINT720_P2_MODE-", "").startswith("Manual 2-sided") else "regular",
+            }
+            quiet_for_printer = {
+                "1": values.get("-PRINT720_P1_MODE-") == "Manual 2-sided / quiet 2nd pass",
+                "2": values.get("-PRINT720_P2_MODE-") == "Manual 2-sided / quiet 2nd pass",
+            }
+            if quiet_for_printer.get(prn1, False):
+                cmd.append("--printer1-quiet-second-pass")
+            if quiet_for_printer.get(prn2, False):
+                cmd.append("--printer2-quiet-second-pass")
+            printer1_mode = mode_for_printer.get(prn1, "regular")
+            printer2_mode = mode_for_printer.get(prn2, "regular")
+            if values.get("-SECONDPASS-", False) and printer1_mode == "regular" and printer2_mode == "regular":
+                output_queues[tab_idx].put("ERROR: Print720 second pass requires at least one printer set to Manual 2-sided.\n")
+                window["-STATUS-"].update("Print720: ERROR: no manual printer for second pass")
+                continue
+
+            if printer1_mode == "manual2sided" and printer2_mode == "manual2sided":
                 cmd.extend(["--print720manual2sided", "--myprint", MYPRINT_PATH])
                 if values.get("-SECONDPASS-", False):
                     cmd.append("--secondpass")
                 label = "ebay_linker.py (print720 manual 2-sided)"
+            elif printer1_mode != printer2_mode:
+                cmd.extend([
+                    "--print720mixed",
+                    "--myprint", MYPRINT_PATH,
+                    "--printer1-mode", printer1_mode,
+                    "--printer2-mode", printer2_mode,
+                ])
+                if values.get("-SECONDPASS-", False):
+                    cmd.append("--secondpass")
+                label = "ebay_linker.py (print720 mixed)"
             else:
                 cmd.append("--print720")
                 label = "ebay_linker.py (print720)"
@@ -1380,6 +1449,8 @@ while True:
             ]
             if values.get("-MANUAL2SIDED-", False) or values.get("-SECONDPASS-", False):
                 cmd.extend(["--print360manual2sided", "--myprint", MYPRINT_PATH])
+                if values.get("-QUIET_SECOND_PASS-", False):
+                    cmd.append("--quiet-second-pass")
                 if values.get("-SECONDPASS-", False):
                     cmd.append("--secondpass")
                 label = "ebay_linker.py (print360 manual 2-sided)"
@@ -1606,6 +1677,19 @@ while True:
                 extra_args.append("-secondpass")
             elif script == "myprint.py" and values.get("-MANUAL2SIDED-", False):
                 extra_args.append("-manual2sided")
+
+            if script == "myprint.py":
+                if values.get("-QUIET_SECOND_PASS-", False):
+                    extra_args.append("-quiet-second-pass")
+                delay_minutes = values.get("-PRINT_DELAY_MINUTES-", "").strip()
+                if delay_minutes:
+                    try:
+                        if float(delay_minutes) > 0:
+                            extra_args.extend(["-delay-minutes", delay_minutes])
+                    except ValueError:
+                        output_queues[tab_idx].put(f"ERROR: Delay must be a number of minutes, got: {delay_minutes!r}\n")
+                        window["-STATUS-"].update("Print manual: invalid delay")
+                        continue
 
             if script in scripts_that_need_pdf:
                 if script == "myprint.py":

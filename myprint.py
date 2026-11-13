@@ -120,6 +120,33 @@ def parse_page_token(token):
     return (None,)
 
 
+def parse_custom_page_ranges(custom_range, page_count):
+    ranges = []
+    for token in custom_range.split(","):
+        token = token.strip()
+        if not token:
+            print("Invalid custom range format. Use like 40-215 or 11-50,75-212.")
+            return None
+
+        parsed = parse_page_token(token)
+        if parsed[0] == "single":
+            start = end = parsed[1]
+        elif parsed[0] == "range":
+            start, end = parsed[1], parsed[2]
+        else:
+            print("Invalid custom range format. Use like 40-215 or 11-50,75-212.")
+            return None
+
+        start = max(1, start)
+        end = min(page_count, end)
+        if start > end:
+            print("Invalid custom range: start > end.")
+            return None
+        ranges.append((start, end))
+
+    return ranges
+
+
 def extract_page_selector_index(parts):
     """
     Find the index in the comma-split setting parts that corresponds to page selection.
@@ -168,6 +195,15 @@ def clip_setting_to_custom_range(setting, custom_start, custom_end):
         return ",".join(parts)
 
     return None
+
+
+def clip_setting_to_custom_ranges(setting, custom_ranges):
+    clipped = []
+    for custom_start, custom_end in custom_ranges:
+        new_setting = clip_setting_to_custom_range(setting, custom_start, custom_end)
+        if new_setting is not None:
+            clipped.append(new_setting)
+    return clipped
 
 
 def is_duplex_setting(setting):
@@ -329,6 +365,17 @@ def selected_page_bounds(settings, page_count):
     return min(pages), max(pages)
 
 
+def selected_pages(settings, page_count):
+    pages = []
+    seen = set()
+    for setting in settings:
+        for page in pages_from_setting(setting, page_count):
+            if page not in seen:
+                pages.append(page)
+                seen.add(page)
+    return pages
+
+
 def make_batch_pair_setting(setting):
     parts = []
     for part in [p.strip() for p in setting.split(",")]:
@@ -375,17 +422,21 @@ def rotate_page_180(page):
 
 
 def prepare_pdf_for_manual_2sided(pdf_path, effective_settings, page_count, temp_dir):
-    start_page, end_page = selected_page_bounds(effective_settings, page_count)
+    pages_to_print = selected_pages(effective_settings, page_count)
+    if not pages_to_print:
+        pages_to_print = list(range(1, page_count + 1))
+
+    start_page, end_page = min(pages_to_print), max(pages_to_print)
     simplex_pages = set()
     for setting in effective_settings:
         if not (is_duplex_setting(setting) and setting_needs_manual_2sided(setting)):
             simplex_pages.update(pages_from_setting(setting, page_count))
-    simplex_pages = {p for p in simplex_pages if start_page <= p <= end_page}
+    simplex_pages = {p for p in simplex_pages if p in pages_to_print}
 
     short_edge = has_short_edge_setting(effective_settings)
     mapping = {}
     new_page_no = 1
-    for old_page in range(start_page, end_page + 1):
+    for old_page in pages_to_print:
         mapping[old_page] = new_page_no
         new_page_no += 1
         if old_page in simplex_pages:
@@ -396,20 +447,26 @@ def prepare_pdf_for_manual_2sided(pdf_path, effective_settings, page_count, temp
     if needs_final_blank:
         new_total += 1
 
-    needs_temp_pdf = start_page != 1 or end_page != page_count or simplex_pages or needs_final_blank or short_edge
+    needs_temp_pdf = pages_to_print != list(range(1, page_count + 1)) or simplex_pages or needs_final_blank or short_edge
     output_pdf = pdf_path
 
     if needs_temp_pdf:
-        try:
-            from pypdf import PdfReader, PdfWriter  # type: ignore
-        except Exception:
-            from PyPDF2 import PdfReader, PdfWriter  # type: ignore
+        started = time.monotonic()
+        print(f"\nPreparing temporary PDF for {len(pages_to_print)} selected pages...", flush=True)
+        # Use the same library as the page-count reader. In particular, pypdf
+        # 6.0 can stall serializing this manual's linked PDF objects.
+        from PyPDF2 import PdfReader, PdfWriter
 
         reader = PdfReader(str(pdf_path))
         writer = PdfWriter()
+        # Article threads can link back to every page in the document.
+        # Remove these navigation links in memory, including on pages reached
+        # indirectly through PDF destinations, before copying print content.
+        for page in reader.pages:
+            page.pop("/B", None)
         output_page_no = 1
         last_selected_page = None
-        for page_index in range(start_page, end_page + 1):
+        for processed, page_index in enumerate(pages_to_print, start=1):
             page = reader.pages[page_index - 1]
             last_selected_page = page
             if short_edge and output_page_no % 2 == 1:
@@ -420,14 +477,18 @@ def prepare_pdf_for_manual_2sided(pdf_path, effective_settings, page_count, temp
                 box = page.mediabox
                 writer.add_blank_page(width=float(box.width), height=float(box.height))
                 output_page_no += 1
+            if processed == 1 or processed % 25 == 0 or processed == len(pages_to_print):
+                print(f"Prepared {processed}/{len(pages_to_print)} selected pages...", flush=True)
         if needs_final_blank:
             blank_source = last_selected_page or reader.pages[end_page - 1]
             box = blank_source.mediabox
             writer.add_blank_page(width=float(box.width), height=float(box.height))
 
         output_pdf = os.path.join(temp_dir, f"{Path(pdf_path).stem}__manual2sided.pdf")
+        print("Saving temporary print PDF...", flush=True)
         with open(output_pdf, "wb") as f:
             writer.write(f)
+        print(f"Temporary PDF ready ({new_total} pages, {time.monotonic() - started:.1f} seconds).", flush=True)
 
     remapped_settings = []
     for setting in effective_settings:
@@ -461,23 +522,67 @@ def prepare_pdf_for_manual_2sided(pdf_path, effective_settings, page_count, temp
 
 
 def printer_exists(printer_name):
-    if os.name != "nt":
-        return False
+    return resolve_printer_name(printer_name) is not None
 
-    ps_script = "$p = Get-CimInstance Win32_Printer | Where-Object { $_.Name -eq $env:PRINTER_NAME }; if ($p) { exit 0 } else { exit 1 }"
-    env = os.environ.copy()
-    env["PRINTER_NAME"] = printer_name
+
+def installed_printer_names():
+    if os.name != "nt":
+        return []
+
     try:
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", ps_script],
-            env=env,
-            stdout=subprocess.DEVNULL,
+            ["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Printer | Select-Object -ExpandProperty Name"],
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
+            text=True,
             check=False,
+            timeout=15,
         )
-        return result.returncode == 0
+        if result.returncode != 0:
+            return []
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except subprocess.TimeoutExpired:
+        print("[WARN] Windows printer lookup timed out after 15 seconds.", flush=True)
+        return []
     except OSError:
-        return False
+        return []
+
+
+def resolve_printer_name(printer_name):
+    for installed in installed_printer_names():
+        if installed.lower() == printer_name.lower():
+            return installed
+    return None
+
+
+def find_quiet_printer(printer_name):
+    requested = f"{printer_name} Quiet"
+    resolved = resolve_printer_name(requested)
+    if resolved:
+        return resolved
+
+    installed = installed_printer_names()
+    quiet_matches = [p for p in installed if p.lower().endswith(" quiet")]
+    model_prefix = printer_name.lower().replace(" series 2", "").replace(" series", "")
+    compatible = [p for p in quiet_matches if p.lower().replace(" series 2", "").replace(" series", "").startswith(model_prefix)]
+    if len(compatible) == 1:
+        print(f"\nNo quiet printer named '{requested}' was found.")
+        print(f"Using installed quiet printer instead: {compatible[0]}")
+        return compatible[0]
+
+    return None
+
+
+def select_second_pass_printer(printer_name, quiet_second_pass=False):
+    if not quiet_second_pass:
+        return printer_name
+
+    print("\nLooking up the Quiet printer for the second pass...", flush=True)
+    quiet_name = find_quiet_printer(printer_name)
+    if quiet_name:
+        return quiet_name
+    print(f"No matching Quiet printer found; using {printer_name} for the second pass.", flush=True)
+    return printer_name
 
 
 def countdown_allow_cancel(seconds):
@@ -558,7 +663,11 @@ def print_one_setting(pdf_path, setting, printer_name, batch_size=70, small_rang
             #  - there is another batch to print for this setting
             #  - AND this setting is not considered a "small range"
             if current_page <= end_page and (not no_wait_for_this_setting):
-                print(f"Waiting for {delay_between_batches // 60} minutes before next batch...")
+                if delay_between_batches % 60 == 0:
+                    wait_text = f"{delay_between_batches // 60} minute(s)"
+                else:
+                    wait_text = f"{delay_between_batches} seconds"
+                print(f"Waiting for {wait_text} before next batch...")
                 time.sleep(delay_between_batches)
 
         return
@@ -678,7 +787,7 @@ def check_already_in_manuals_csv(pdf_path: str, manuals_by_title: dict):
 
 # -------------------- printing flow --------------------
 
-def print_pdf(printer_name, partial_name, manual_2sided=False, second_pass_only=False):
+def print_pdf(printer_name, partial_name, manual_2sided=False, second_pass_only=False, delay_minutes=0.0, quiet_second_pass=False):
     """Prints a PDF with predefined settings or user-defined page ranges."""
     pdf_path = find_pdf(partial_name)
     if not pdf_path:
@@ -728,55 +837,40 @@ def print_pdf(printer_name, partial_name, manual_2sided=False, second_pass_only=
     for setting in print_settings:
         print(setting)
 
-    custom_range = input("\nEnter the page range to print (e.g., 40-215), or press Enter for default: ").strip()
+    custom_range = input("\nEnter the page range to print (e.g., 40-215 or 11-50,75-212), or press Enter for default: ").strip()
 
     effective_settings = list(print_settings)
 
     if custom_range:
-        if "-" not in custom_range:
-            print("Invalid custom range format. Use like 40-215.")
-            return
-        a1, b1 = custom_range.split("-", 1)
-        a1, b1 = a1.strip(), b1.strip()
-        if not (a1.isdigit() and b1.isdigit()):
-            print("Invalid custom range format. Use like 40-215.")
-            return
-
-        custom_start, custom_end = int(a1), int(b1)
-        if custom_start < 1:
-            custom_start = 1
-        if custom_end > page_count:
-            custom_end = page_count
-        if custom_start > custom_end:
-            print("Invalid custom range: start > end.")
+        custom_ranges = parse_custom_page_ranges(custom_range, page_count)
+        if custom_ranges is None:
             return
 
         clipped = []
         for setting in print_settings:
-            new_setting = clip_setting_to_custom_range(setting, custom_start, custom_end)
-            if new_setting is not None:
-                clipped.append(new_setting)
+            clipped.extend(clip_setting_to_custom_ranges(setting, custom_ranges))
 
         if not clipped:
-            print(f"No pages to print after applying custom range {custom_start}-{custom_end}.")
+            formatted_ranges = ",".join(f"{a}-{b}" if a != b else str(a) for a, b in custom_ranges)
+            print(f"No pages to print after applying custom range {formatted_ranges}.")
             return
 
         effective_settings = clipped
 
-        print("\nEffective settings after applying custom range:")
+        print("\nEffective settings after applying custom range(s):")
         for s in effective_settings:
             print(s)
 
     batch_size = 70
 
+    if delay_minutes and delay_minutes > 0:
+        delay_seconds = int(delay_minutes * 60)
+        print(f"\nWaiting {delay_minutes:g} minute(s) before starting print...")
+        time.sleep(delay_seconds)
+
     if manual_2sided or second_pass_only:
-        quiet_printer_name = f"{printer_name} Quiet"
-        if not printer_exists(quiet_printer_name):
-            print(f"\nManual 2-sided mode requires a quiet printer named:")
-            print(quiet_printer_name)
-            print("No matching quiet printer was found, so printing will not start.")
-            print("This printer is assumed to have working automatic double-sided printing.")
-            return
+        quiet_printer_name = select_second_pass_printer(printer_name, quiet_second_pass)
+        print(f"\nSecond-pass printer: {quiet_printer_name}", flush=True)
 
         with tempfile.TemporaryDirectory(prefix="myprint_manual2sided_") as temp_dir:
             manual_pdf_path, manual_settings = prepare_pdf_for_manual_2sided(
@@ -834,7 +928,7 @@ def print_pdf(printer_name, partial_name, manual_2sided=False, second_pass_only=
                     printer_name,
                     batch_size=batch_size,
                     small_range_no_wait_threshold=10,
-                    delay_between_batches=60,
+                    delay_between_batches=90,
                 )
 
             if not second_pass_settings:
@@ -890,7 +984,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "-secondpass",
         action="store_true",
-        help="Run only the manual two-sided odd-page second pass, using the matching Quiet printer.",
+        help="Run only the manual two-sided odd-page second pass.",
+    )
+    parser.add_argument(
+        "-quiet-second-pass", "--quiet-second-pass",
+        action="store_true",
+        help="Use a matching Quiet printer for the manual second pass if installed; otherwise use the regular printer.",
+    )
+    parser.add_argument(
+        "-delay-minutes",
+        type=float,
+        default=0.0,
+        help="Wait this many minutes after answering the page range prompt, before printing starts.",
     )
     args = parser.parse_args()
 
@@ -904,4 +1009,6 @@ if __name__ == "__main__":
         file_name,
         manual_2sided=args.manual2sided,
         second_pass_only=args.secondpass,
+        delay_minutes=args.delay_minutes,
+        quiet_second_pass=args.quiet_second_pass,
     )

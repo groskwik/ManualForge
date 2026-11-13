@@ -25,6 +25,17 @@ from selenium.common.exceptions import StaleElementReferenceException
 AWAITING_URL = "https://www.ebay.com/sh/ord/?filter=status:AWAITING_SHIPMENT"
 ALL_ORDERS_URL = "https://www.ebay.com/sh/ord/?filter=status:ALL_ORDERS"
 SHIPPED_URL = "https://www.ebay.com/sh/ord/?filter=status:PAID_SHIPPED"
+PROFILE_FOLDERS = {
+    "primary": "chrome_profile_selenium",
+    "secondary": "chrome_profile_selenium_2",
+    "tertiary": "chrome_profile_selenium_3",
+}
+
+
+def account_profile(account: str, override: str | None = None) -> Path:
+    if override:
+        return Path(override).resolve()
+    return Path(__file__).resolve().parent / PROFILE_FOLDERS[account]
 
 RE_ORDER_FULL = re.compile(r"^\d{2}-\d{5}-\d{5}$")   # e.g. 27-13984-70927
 RE_AVAILABLE = re.compile(r"\((\d+)\s+available\)", re.IGNORECASE)
@@ -694,12 +705,14 @@ def main():
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--out-dir", default=".", help="Output folder for CSV.")
 
-    ap.add_argument("--account", choices=["primary", "secondary", "both"], default="both",
-                    help="Which eBay account(s) to scrape (profiles are separate). Default: both.")
+    ap.add_argument("--account", choices=[*PROFILE_FOLDERS, "both", "all"], default="both",
+                    help="Account to scrape; both = primary + secondary (default), all = all three.")
     ap.add_argument("--primary-profile", default=None,
                     help="Folder for the primary Chrome user-data-dir (default: ./chrome_profile_selenium).")
     ap.add_argument("--secondary-profile", default=None,
                     help="Folder for the secondary Chrome user-data-dir (default: ./chrome_profile_selenium_2).")
+    ap.add_argument("--tertiary-profile", default=None,
+                    help="Folder for the third Chrome user-data-dir (default: ./chrome_profile_selenium_3).")
 
     ap.add_argument("--chrome-binary", default=None,
                     help="Optional path to Chrome/Chromium binary.")
@@ -722,19 +735,12 @@ def main():
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    script_dir = Path(__file__).resolve().parent
-    primary_profile = Path(args.primary_profile).resolve() if args.primary_profile else (script_dir / "chrome_profile_selenium")
-    secondary_profile = Path(args.secondary_profile).resolve() if args.secondary_profile else (script_dir / "chrome_profile_selenium_2")
-
+    selected = (list(PROFILE_FOLDERS) if args.account == "all" else
+                ["primary", "secondary"] if args.account == "both" else [args.account])
     accounts = [
-        AccountSpec("primary", primary_profile),
-        AccountSpec("secondary", secondary_profile),
+        AccountSpec(name, account_profile(name, getattr(args, f"{name}_profile")))
+        for name in selected
     ]
-
-    if args.account == "primary":
-        accounts = [accounts[0]]
-    elif args.account == "secondary":
-        accounts = [accounts[1]]
 
     combined_rows: list[dict] = []
     for acc in accounts:

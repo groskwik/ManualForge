@@ -218,7 +218,8 @@ def inventory_location_summary(hits: List[InventoryHit]) -> str:
 
 def list_pdfs(folder: Path, recursive: bool) -> List[PdfEntry]:
     if not folder.exists():
-        raise FileNotFoundError(f"PDF folder not found: {folder}")
+        print(f"[pdf] Folder not found, skipping: {folder}")
+        return []
 
     paths = list(folder.rglob("*.pdf")) if recursive else list(folder.glob("*.pdf"))
 
@@ -243,6 +244,11 @@ def fallback_admin_downloads_path(path: Path) -> Path:
     admin_prefix = r"c:\Users\Admin\Downloads"
     if text.lower().startswith(benoi_prefix.lower()):
         fallback = Path(admin_prefix + text[len(benoi_prefix):])
+        if fallback.exists():
+            print(f"Using fallback PDF folder: {fallback} (original not found: {path})")
+            return fallback
+    elif text.lower().startswith(admin_prefix.lower()):
+        fallback = Path(benoi_prefix + text[len(admin_prefix):])
         if fallback.exists():
             print(f"Using fallback PDF folder: {fallback} (original not found: {path})")
             return fallback
@@ -446,6 +452,52 @@ def top_candidates(title: str, pdfs: List[PdfEntry], k: int = 0) -> List[Candida
     return scored
 
 
+def direct_pdf_name_candidates(query: str, pdfs: List[PdfEntry]) -> List[PdfEntry]:
+    q = _norm(query)
+    if not q:
+        return []
+
+    exact = [p for p in pdfs if _norm(p.base) == q]
+    if exact:
+        return exact
+
+    contains = [p for p in pdfs if q in _norm(p.base)]
+    if contains:
+        contains.sort(key=lambda p: (len(p.base), p.base.lower()))
+        return contains
+
+    ranked = top_candidates(query, pdfs, k=10)
+    return [c.pdf for c in ranked if c.score >= 35.0]
+
+
+def choose_pdf_from_manual_search(query: str, pdfs: List[PdfEntry]) -> Optional[PdfEntry]:
+    matches = direct_pdf_name_candidates(query, pdfs)
+    if not matches:
+        print(f"No PDF filename match for: {query!r}")
+        return None
+
+    if len(matches) == 1:
+        print(f"Manual filename selected: {matches[0].base}")
+        return matches[0]
+
+    show = min(20, len(matches))
+    print(f"\nManual filename matches for {query!r}:")
+    for i, pdf in enumerate(matches[:show], start=1):
+        print(f"  {i}. {pdf.base}")
+    if len(matches) > show:
+        print(f"  ... {len(matches) - show} more not shown; type a more specific filename if needed.")
+
+    while True:
+        s = input(f"Select manual filename match 1-{show}, or q to return: ").strip().lower()
+        if s == "q":
+            return None
+        if s.isdigit():
+            idx = int(s) - 1
+            if 0 <= idx < show:
+                return matches[idx]
+        print("Type a shown number, or q to return to the candidate list.")
+
+
 def choose_match_interactive(
     order_title: str,
     cands: List[Candidate],
@@ -489,16 +541,30 @@ def choose_match_interactive(
         shown = end
         next_batch_size = 10
 
+        if shown == end:
+            print("Tip: type part of the PDF filename directly, or /search terms to rerank manually.")
+
         if shown < len(cands):
-            prompt = f"\nSelect match: 1-{shown}, type 0 to continue the list, or q to give up: "
+            prompt = f"\nSelect match: 1-{shown}, 0=more, PDF name/search, /rerank, or q: "
         else:
-            prompt = f"\nSelect match: 1-{shown}, or q to give up: "
+            prompt = f"\nSelect match: 1-{shown}, PDF name/search, /rerank, or q: "
 
         while True:
             s = input(prompt).strip().lower()
 
             if s == "q":
                 return None
+
+            if s.startswith("/"):
+                manual_query = s[1:].strip()
+                if not manual_query:
+                    print("Type search text after '/', for example: /ft 990")
+                    continue
+                cands = top_candidates(manual_query, [c.pdf for c in cands], k=0)
+                shown = 0
+                next_batch_size = 3
+                print(f"\nReranking matches using: {manual_query!r}")
+                break
 
             if s == "0":
                 if shown < len(cands):
@@ -515,6 +581,10 @@ def choose_match_interactive(
                 else:
                     print("That option is not available.")
                 continue
+
+            manual_pdf = choose_pdf_from_manual_search(s, [c.pdf for c in cands])
+            if manual_pdf is not None:
+                return manual_pdf
 
             if shown < len(cands):
                 print(f"Invalid input. Use 1-{shown}, 0 to continue, or q.")
@@ -634,6 +704,8 @@ class Print360ManualTask:
     page_range: str
     padded: bool
     effective_settings: Optional[List[str]] = None
+    first_pass_side: str = "even"
+    second_pass_side: str = "odd"
 
 
 def load_myprint_module(myprint_path: str) -> Any:
@@ -990,6 +1062,163 @@ def make_batch_pair_setting(myprint_module: Any, setting: str) -> str:
     return ",".join(parts)
 
 
+def setting_pages_set(myprint_module: Any, setting: str, max_page: int) -> set[int]:
+    return set(pages_from_setting(myprint_module, setting, max_page))
+
+
+def setting_color_mode(setting: str) -> str:
+    parts = [p.strip().lower() for p in setting.split(",")]
+    return "color" if "color" in parts else "monochrome"
+
+
+def setting_without_color_mode(setting: str) -> List[str]:
+    return [
+        p.strip()
+        for p in setting.split(",")
+        if p.strip().lower() not in ("color", "monochrome")
+    ]
+
+
+def replace_or_insert_page_token(myprint_module: Any, parts: List[str], page_token: str) -> List[str]:
+    out = list(parts)
+    page_idx = myprint_module.extract_page_selector_index(out)
+    if page_idx is None:
+        out.insert(1 if out else 0, page_token)
+    else:
+        out[page_idx] = page_token
+    return out
+
+
+def normalize_manual_duplex_parts(parts: List[str]) -> List[str]:
+    out: List[str] = []
+    for part in parts:
+        low = part.strip().lower()
+        if low in ("simplex", "simplexshort"):
+            out.append("duplex")
+        elif low in ("even", "odd"):
+            continue
+        else:
+            out.append(part.strip())
+    if "duplex" not in [p.lower() for p in out] and "duplexshort" not in [p.lower() for p in out]:
+        out.append("duplex")
+    return out
+
+
+def optimized_even_range_manual_settings(
+    myprint_module: Any,
+    clipped_settings: List[str],
+    original_start: int,
+    original_end: int,
+) -> Optional[List[str]]:
+    selected_count = original_end - original_start + 1
+    if selected_count <= 0 or selected_count % 2 != 0:
+        return None
+
+    page_to_setting: Dict[int, str] = {}
+    setting_pages: List[Tuple[str, set[int]]] = [
+        (setting, setting_pages_set(myprint_module, setting, original_end))
+        for setting in clipped_settings
+    ]
+    for page in range(original_start, original_end + 1):
+        for setting, pages in setting_pages:
+            if page in pages:
+                page_to_setting[page] = setting
+                break
+
+    if any(page not in page_to_setting for page in range(original_start, original_end + 1)):
+        return None
+
+    paired_settings: List[str] = []
+    page = original_start
+    while page <= original_end:
+        s1 = page_to_setting[page]
+        s2 = page_to_setting[page + 1]
+        color_mode = "color" if setting_color_mode(s1) == "color" or setting_color_mode(s2) == "color" else "monochrome"
+        base_setting = s1 if setting_color_mode(s1) == color_mode else s2
+        parts = setting_without_color_mode(base_setting)
+        parts = replace_or_insert_page_token(myprint_module, parts, f"{page}-{page + 1}")
+        parts = normalize_manual_duplex_parts(parts)
+        paired_settings.append(",".join([color_mode] + parts))
+        page += 2
+
+    merged: List[str] = []
+    for setting in paired_settings:
+        if not merged:
+            merged.append(setting)
+            continue
+        prev_parts = [p.strip() for p in merged[-1].split(",")]
+        curr_parts = [p.strip() for p in setting.split(",")]
+        prev_idx = myprint_module.extract_page_selector_index(prev_parts)
+        curr_idx = myprint_module.extract_page_selector_index(curr_parts)
+        if prev_idx is None or curr_idx is None or prev_idx != curr_idx:
+            merged.append(setting)
+            continue
+        prev_token = prev_parts[prev_idx]
+        curr_token = curr_parts[curr_idx]
+        prev_parsed = myprint_module.parse_page_token(prev_token)
+        curr_parsed = myprint_module.parse_page_token(curr_token)
+        if prev_parsed[0] != "range" or curr_parsed[0] != "range":
+            merged.append(setting)
+            continue
+        prev_shape = prev_parts[:prev_idx] + ["<pages>"] + prev_parts[prev_idx + 1:]
+        curr_shape = curr_parts[:curr_idx] + ["<pages>"] + curr_parts[curr_idx + 1:]
+        if prev_shape == curr_shape and prev_parsed[2] + 1 == curr_parsed[1]:
+            prev_parts[prev_idx] = f"{prev_parsed[1]}-{curr_parsed[2]}"
+            merged[-1] = ",".join(prev_parts)
+        else:
+            merged.append(setting)
+    return merged
+
+
+def fill_missing_manual_settings(
+    myprint_module: Any,
+    clipped_settings: List[str],
+    original_start: int,
+    original_end: int,
+) -> List[str]:
+    if not clipped_settings:
+        return clipped_settings
+
+    covered = set()
+    for setting in clipped_settings:
+        covered.update(pages_from_setting(myprint_module, setting, original_end))
+
+    missing = [p for p in range(original_start, original_end + 1) if p not in covered]
+    if not missing:
+        return clipped_settings
+
+    filler_base = clipped_settings[-1]
+    filler_parts = [p.strip() for p in filler_base.split(",")]
+    page_idx = myprint_module.extract_page_selector_index(filler_parts)
+    if page_idx is None:
+        return clipped_settings
+
+    fillers: List[str] = []
+    start = prev = missing[0]
+    for page in missing[1:]:
+        if page == prev + 1:
+            prev = page
+            continue
+        token = str(start) if start == prev else f"{start}-{prev}"
+        fillers.append(replace_setting_page_tokens(myprint_module, filler_base, {page_idx: token}))
+        start = prev = page
+    token = str(start) if start == prev else f"{start}-{prev}"
+    fillers.append(replace_setting_page_tokens(myprint_module, filler_base, {page_idx: token}))
+
+    print(
+        f"[manual2sided] WARNING: print settings did not cover pages "
+        f"{missing[0]}-{missing[-1]}; using last setting for missing range(s).",
+        flush=True,
+    )
+    return clipped_settings + fillers
+
+
+def prepared_manual2sided_pdf_path(original: Path, page_range: str, reason: str) -> Path:
+    safe_range = page_range.replace("-", "_").replace(",", "_")
+    safe_reason = re.sub(r"[^A-Za-z0-9_]+", "_", reason).strip("_") or "prepared"
+    return original.with_name(f"{original.stem}__manual2sided_{safe_reason}__{safe_range}{original.suffix}")
+
+
 def replace_setting_page_tokens(myprint_module: Any, setting: str, replacements: Dict[int, str]) -> str:
     parts = [p.strip() for p in setting.split(",")]
     page_indices = myprint_module.extract_page_selector_indices(parts)
@@ -1033,12 +1262,34 @@ def prepare_task_for_batch_manual_2sided(
         clipped = myprint_module.clip_setting_to_custom_range(setting, original_start, original_end)
         if clipped is not None:
             clipped_settings.append(clipped)
+    clipped_settings = fill_missing_manual_settings(myprint_module, clipped_settings, original_start, original_end)
 
     simplex_pages = set()
     for setting in clipped_settings:
         if not (myprint_module.is_duplex_setting(setting) and myprint_module.setting_needs_manual_2sided(setting)):
             simplex_pages.update(pages_from_setting(myprint_module, setting, original_end))
     short_edge = myprint_module.has_short_edge_setting(clipped_settings)
+    selected_count = original_end - original_start + 1
+
+    task.first_pass_side = "even" if original_start % 2 == 1 else "odd"
+    task.second_pass_side = "odd" if original_start % 2 == 1 else "even"
+
+    optimized_settings = None
+    if not short_edge and selected_count % 2 == 0:
+        optimized_settings = optimized_even_range_manual_settings(
+            myprint_module,
+            clipped_settings,
+            original_start,
+            original_end,
+        )
+
+    if optimized_settings is not None:
+        task.print_path = task.pdf.path
+        task.padded_pages = selected_count
+        task.page_range = f"{original_start}-{original_end}"
+        task.padded = False
+        task.effective_settings = optimized_settings
+        return
 
     mapping: Dict[int, int] = {}
     new_page_no = 1
@@ -1087,11 +1338,24 @@ def prepare_task_for_batch_manual_2sided(
             box = blank_source.mediabox
             writer.add_blank_page(width=float(box.width), height=float(box.height))
 
-        safe_range = task.page_range.replace("-", "_")
-        out_path = temp_dir / f"{task.order_index}_{task.pdf.path.stem}_{safe_range}__batch_manual2sided.pdf"
-        with out_path.open("wb") as f:
-            writer.write(f)
-        task.print_path = out_path
+        reason = "shortedge" if short_edge else "blank" if needs_final_blank else "prepared"
+        persistent_path = prepared_manual2sided_pdf_path(task.pdf.path, task.page_range, reason)
+        if persistent_path.exists():
+            print(f"[manual2sided] Using existing prepared PDF: {persistent_path}", flush=True)
+            task.print_path = persistent_path
+        else:
+            try:
+                with persistent_path.open("wb") as f:
+                    writer.write(f)
+                print(f"[manual2sided] Created prepared PDF: {persistent_path}", flush=True)
+                task.print_path = persistent_path
+            except OSError as e:
+                print(f"[manual2sided] WARNING: could not save prepared PDF next to original: {e}", flush=True)
+                safe_range = task.page_range.replace("-", "_")
+                out_path = temp_dir / f"{task.order_index}_{task.pdf.path.stem}_{safe_range}__batch_manual2sided.pdf"
+                with out_path.open("wb") as f:
+                    writer.write(f)
+                task.print_path = out_path
 
     remapped_settings: List[str] = []
     for setting in clipped_settings:
@@ -1126,6 +1390,8 @@ def prepare_task_for_batch_manual_2sided(
     task.page_range = f"1-{new_total}"
     task.padded = needs_temp_pdf
     task.effective_settings = remapped_settings
+    task.first_pass_side = "even"
+    task.second_pass_side = "odd"
 
 
 def prepare_tasks_for_batch_manual_2sided(
@@ -1145,9 +1411,9 @@ def prepare_tasks_for_batch_manual_2sided(
             temp_dir=temp_dir,
         )
         if task.print_path != task.pdf.path:
-            print(f"[{label}] Prepared temporary PDF: {task.print_path.name}", flush=True)
+            print(f"[{label}] Prepared PDF: {task.print_path.name}", flush=True)
         else:
-            print(f"[{label}] No temporary PDF needed: {task.pdf.base}", flush=True)
+            print(f"[{label}] No prepared PDF needed: {task.pdf.base}", flush=True)
 
 
 def task_needs_batch_manual_2sided_temp_pdf(
@@ -1167,11 +1433,29 @@ def task_needs_batch_manual_2sided_temp_pdf(
         clipped = myprint_module.clip_setting_to_custom_range(setting, original_start, original_end)
         if clipped is not None:
             clipped_settings.append(clipped)
+    clipped_settings = fill_missing_manual_settings(myprint_module, clipped_settings, original_start, original_end)
 
     simplex_pages = set()
     for setting in clipped_settings:
         if not (myprint_module.is_duplex_setting(setting) and myprint_module.setting_needs_manual_2sided(setting)):
             simplex_pages.update(pages_from_setting(myprint_module, setting, original_end))
+
+    selected_count = original_end - original_start + 1
+    short_edge = myprint_module.has_short_edge_setting(clipped_settings)
+    if not short_edge and selected_count % 2 == 0:
+        optimized_settings = optimized_even_range_manual_settings(
+            myprint_module,
+            clipped_settings,
+            original_start,
+            original_end,
+        )
+        if optimized_settings is not None:
+            task.first_pass_side = "even" if original_start % 2 == 1 else "odd"
+            task.second_pass_side = "odd" if original_start % 2 == 1 else "even"
+            task.effective_settings = optimized_settings
+            task.padded_pages = selected_count
+            task.padded = False
+            return False
 
     new_total = original_end - original_start + 1 + sum(1 for p in simplex_pages if original_start <= p <= original_end)
     needs_final_blank = new_total % 2 == 1
@@ -1181,7 +1465,7 @@ def task_needs_batch_manual_2sided_temp_pdf(
         or original_end != task.original_pages
         or bool(simplex_pages)
         or needs_final_blank
-        or myprint_module.has_short_edge_setting(clipped_settings)
+        or short_edge
     )
 
 
@@ -1192,7 +1476,7 @@ def prepare_task_for_batch_manual_2sided_with_progress(
     task: Print360ManualTask,
     temp_dir: Path,
 ) -> Print360ManualTask:
-    print(f"[print360manual2sided] Background preparing temporary PDF: {task.pdf.base} pages {task.page_range}", flush=True)
+    print(f"[print360manual2sided] Background preparing PDF: {task.pdf.base} pages {task.page_range}", flush=True)
     prepare_task_for_batch_manual_2sided(
         myprint_module=myprint_module,
         print_settings=print_settings,
@@ -1224,18 +1508,23 @@ def settings_for_print360_manual_task(myprint_module: Any, print_settings: Dict[
     return effective
 
 
-def split_manual_2sided_settings(myprint_module: Any, settings: List[str]) -> Tuple[List[str], List[str], List[str]]:
+def split_manual_2sided_settings(
+    myprint_module: Any,
+    settings: List[str],
+    first_pass_side: str = "even",
+    second_pass_side: str = "odd",
+) -> Tuple[List[str], List[str], List[str]]:
     first_pass: List[str] = []
     second_pass: List[str] = []
     simplex_only: List[str] = []
     for setting in settings:
         if myprint_module.is_duplex_setting(setting) and myprint_module.setting_needs_manual_2sided(setting):
-            first_pass.append(myprint_module.make_manual_2sided_setting(setting, "even"))
-            second_pass.append(myprint_module.make_manual_2sided_setting(setting, "odd"))
+            first_pass.append(myprint_module.make_manual_2sided_setting(setting, first_pass_side))
+            second_pass.append(myprint_module.make_manual_2sided_setting(setting, second_pass_side))
         else:
             pair_setting = myprint_module.make_batch_pair_setting(setting)
-            first_pass.append(myprint_module.make_manual_2sided_setting(pair_setting, "even"))
-            second_pass.append(myprint_module.make_manual_2sided_setting(pair_setting, "odd"))
+            first_pass.append(myprint_module.make_manual_2sided_setting(pair_setting, first_pass_side))
+            second_pass.append(myprint_module.make_manual_2sided_setting(pair_setting, second_pass_side))
     return first_pass, second_pass, simplex_only
 
 
@@ -1263,7 +1552,12 @@ def execute_print360_manual_first_pass_batch(
     print(f"\n[{label}] FIRST PASS batch {batch_no} on {printer_name}")
     for task in tasks:
         settings = settings_for_print360_manual_task(myprint_module, print_settings, task)
-        first_pass, second_pass, simplex_only = split_manual_2sided_settings(myprint_module, settings)
+        first_pass, second_pass, simplex_only = split_manual_2sided_settings(
+            myprint_module,
+            settings,
+            task.first_pass_side,
+            task.second_pass_side,
+        )
         warning_simplex = [s for s in simplex_only if not is_padding_blank_setting(myprint_module, task, s)]
         if warning_simplex:
             simplex_pages.append(f"{task.pdf.base}: " + ", ".join(myprint_module.describe_setting_pages(s) for s in warning_simplex))
@@ -1309,7 +1603,12 @@ def execute_print360_manual_second_pass(
     for task, settings in second_pass_jobs:
         myprint_module.display_sumatra_commands_for_settings(str(task.print_path), settings, quiet_printer_name, batch_size=70)
 
-    input(f"Press Enter when {quiet_printer_name} is loaded and ready for the odd-page second pass...")
+    try:
+        input(f"Press Enter when {quiet_printer_name} is loaded and ready for the odd-page second pass...")
+    except EOFError:
+        print("\n[print360manual2sided] Input stream closed; second pass was not started.")
+        print("[print360manual2sided] Reload the paper and run second-pass mode to print the odd-page pass.")
+        return
     if not myprint_module.countdown_allow_cancel(15):
         return
 
@@ -1434,7 +1733,12 @@ def collect_print360_manual_second_pass_jobs(
 
     for task in tasks:
         settings = settings_for_print360_manual_task(myprint_module, print_settings, task)
-        _, second_pass, simplex_only = split_manual_2sided_settings(myprint_module, settings)
+        _, second_pass, simplex_only = split_manual_2sided_settings(
+            myprint_module,
+            settings,
+            task.first_pass_side,
+            task.second_pass_side,
+        )
         warning_simplex = [s for s in simplex_only if not is_padding_blank_setting(myprint_module, task, s)]
         if warning_simplex:
             simplex_pages.append(f"{task.pdf.base}: " + ", ".join(myprint_module.describe_setting_pages(s) for s in warning_simplex))
@@ -1474,7 +1778,7 @@ def execute_print360_manual_first_pass_batch_with_background_preparation(
     )
     print(
         f"[print360manual2sided] {len(ready_tasks)} manual(s) can print immediately; "
-        f"{len(prep_tasks)} manual(s) need temporary PDF preparation."
+        f"{len(prep_tasks)} manual(s) need prepared PDF handling."
     )
     summarize_manual_tasks("print360manual2sided", tasks, printer_name)
 
@@ -1506,7 +1810,7 @@ def execute_print360_manual_first_pass_batch_with_background_preparation(
             simplex_pages.extend(simplex)
 
         if futures:
-            print("\n[print360manual2sided] Waiting for prepared temporary PDFs as needed.")
+            print("\n[print360manual2sided] Waiting for prepared PDFs as needed.")
             for fut in as_completed(futures):
                 task = fut.result()
                 jobs, simplex = execute_print360_manual_first_pass_batch(
@@ -1596,7 +1900,12 @@ def execute_print720_manual_second_pass(
         ready_target = f"{quiet_printer1_name} is loaded"
     else:
         ready_target = f"{quiet_printer2_name} is loaded"
-    input(f"Press Enter when {ready_target} and ready for the odd-page second pass...")
+    try:
+        input(f"Press Enter when {ready_target} and ready for the odd-page second pass...")
+    except EOFError:
+        print("\n[print720manual2sided] Input stream closed; second pass was not started.")
+        print("[print720manual2sided] Reload the paper and run second-pass mode to print the odd-page pass.")
+        return
     if not myprint_module.countdown_allow_cancel(15):
         return
 
@@ -1989,6 +2298,120 @@ def _plan_for_one_printer(
     return tasks, allocated, pos
 
 
+def _plan_whole_manuals_for_one_printer(
+    *,
+    docs: List[EligibleDoc],
+    start_pos: PrintStreamPos,
+    page_limit: int,
+) -> Tuple[List[PrintTask], int, PrintStreamPos]:
+    tasks: List[PrintTask] = []
+    allocated = 0
+    pos = _advance_pos(docs, start_pos)
+
+    while pos.doc_list_index < len(docs):
+        d = docs[pos.doc_list_index]
+        start_page = max(1, min(pos.next_page, d.total_pages + 1))
+        if start_page > d.total_pages:
+            pos = _advance_pos(docs, PrintStreamPos(doc_list_index=pos.doc_list_index + 1, next_page=1))
+            continue
+
+        pages = d.total_pages - start_page + 1
+        remaining_capacity = page_limit - allocated
+        if tasks and pages > remaining_capacity:
+            break
+
+        if not tasks and pages > page_limit:
+            print(f"[print720mixed] Oversized manual assigned whole to one printer: {d.pdf.base} ({pages} pages)")
+        elif pages > remaining_capacity:
+            break
+
+        tasks.append(PrintTask(pdf=d.pdf, start_page=start_page, end_page=d.total_pages))
+        allocated += pages
+        pos = _advance_pos(docs, PrintStreamPos(doc_list_index=pos.doc_list_index + 1, next_page=1))
+
+        if allocated >= page_limit:
+            break
+
+    return tasks, allocated, pos
+
+
+def _plan_whole_manuals_for_two_printers(
+    *,
+    docs: List[EligibleDoc],
+    start_pos: PrintStreamPos,
+    page_limit: int,
+) -> Tuple[List[PrintTask], List[PrintTask], int, int, PrintStreamPos]:
+    tasks_p1: List[PrintTask] = []
+    tasks_p2: List[PrintTask] = []
+    allocated_p1 = 0
+    allocated_p2 = 0
+    pos = _advance_pos(docs, start_pos)
+
+    while pos.doc_list_index < len(docs):
+        d = docs[pos.doc_list_index]
+        start_page = max(1, min(pos.next_page, d.total_pages + 1))
+        if start_page > d.total_pages:
+            pos = _advance_pos(docs, PrintStreamPos(doc_list_index=pos.doc_list_index + 1, next_page=1))
+            continue
+
+        pages = d.total_pages - start_page + 1
+        candidates: List[Tuple[int, int]] = []
+        if not tasks_p1 or allocated_p1 + pages <= page_limit:
+            candidates.append((allocated_p1, 1))
+        if not tasks_p2 or allocated_p2 + pages <= page_limit:
+            candidates.append((allocated_p2, 2))
+
+        if not candidates:
+            break
+
+        _, printer_no = min(candidates, key=lambda item: item[0])
+        if pages > page_limit:
+            print(f"[print720mixed] Oversized manual assigned whole to printer {printer_no}: {d.pdf.base} ({pages} pages)")
+
+        task = PrintTask(pdf=d.pdf, start_page=start_page, end_page=d.total_pages)
+        if printer_no == 1:
+            tasks_p1.append(task)
+            allocated_p1 += pages
+        else:
+            tasks_p2.append(task)
+            allocated_p2 += pages
+
+        pos = _advance_pos(docs, PrintStreamPos(doc_list_index=pos.doc_list_index + 1, next_page=1))
+
+        if allocated_p1 >= page_limit and allocated_p2 >= page_limit:
+            break
+
+    return tasks_p1, tasks_p2, allocated_p1, allocated_p2, pos
+
+
+def filter_eligible_docs_for_inventory(
+    docs: List[EligibleDoc],
+    inventory: Optional[ManualsInventory],
+    skip_collector: Optional[InventorySkipCollector],
+) -> List[EligibleDoc]:
+    if inventory is None:
+        return docs
+
+    out: List[EligibleDoc] = []
+    for doc in docs:
+        hits = inventory.lookup_pdf(doc.pdf)
+        if hits:
+            location = inventory_location_summary(hits)
+            print(f"\n[inventory] SKIP planning '{doc.pdf.base}' because it is already in manuals.csv")
+            print(f"[inventory] Location/info: {location}")
+            if skip_collector is not None:
+                skip_collector.add(
+                    SkippedInventoryRecord(
+                        pdf_base=doc.pdf.base,
+                        pdf_path=str(doc.pdf.path),
+                        location=location,
+                    )
+                )
+            continue
+        out.append(doc)
+    return out
+
+
 def plan_print720(
     *,
     orders: List[Dict[str, str]],
@@ -2032,6 +2455,76 @@ def plan_print720(
         t1, p1, posN1 = _plan_for_one_printer(docs=docs_normal, start_pos=posN0, page_limit=limit_each, force_even_end_if_cut=True)
         t2, p2, posN2 = _plan_for_one_printer(docs=docs_normal, start_pos=posN1, page_limit=limit_each, force_even_end_if_cut=True)
         endN = posN2
+        endT = posT0
+
+    endN = _advance_pos(docs_normal, endN)
+    endT = _advance_pos(docs_tw, endT)
+
+    has_more_normal = endN.doc_list_index < len(docs_normal)
+    has_more_typewriter = endT.doc_list_index < len(docs_tw)
+
+    return Print720Plan(
+        tasks_p1=t1,
+        tasks_p2=t2,
+        printed_p1=p1,
+        printed_p2=p2,
+        end_pos_normal=endN,
+        end_pos_typewriter=endT,
+        has_more_normal=has_more_normal,
+        has_more_typewriter=has_more_typewriter,
+    )
+
+
+def plan_print720_mixed_whole_manuals(
+    *,
+    orders: List[Dict[str, str]],
+    itemid_index: Dict[str, str],
+    itemid_typewriter: Dict[str, bool],
+    pdf_by_normbase: Dict[str, PdfEntry],
+    start_pos_normal: PrintStreamPos,
+    start_pos_typewriter: PrintStreamPos,
+    limit_each: int = 360,
+    typewriter_printer: int = 0,
+    inventory: Optional[ManualsInventory] = None,
+    skip_collector: Optional[InventorySkipCollector] = None,
+) -> Print720Plan:
+    docs_normal = _build_eligible_docs(
+        orders=orders,
+        itemid_index=itemid_index,
+        itemid_typewriter=itemid_typewriter,
+        pdf_by_normbase=pdf_by_normbase,
+        want_typewriter=False,
+    )
+    docs_tw = _build_eligible_docs(
+        orders=orders,
+        itemid_index=itemid_index,
+        itemid_typewriter=itemid_typewriter,
+        pdf_by_normbase=pdf_by_normbase,
+        want_typewriter=True,
+    )
+    docs_normal = filter_eligible_docs_for_inventory(docs_normal, inventory, skip_collector)
+    docs_tw = filter_eligible_docs_for_inventory(docs_tw, inventory, skip_collector)
+
+    posN0 = _advance_pos(docs_normal, start_pos_normal)
+    posT0 = _advance_pos(docs_tw, start_pos_typewriter)
+
+    if typewriter_printer == 1:
+        t1, p1, posT1 = _plan_whole_manuals_for_one_printer(docs=docs_tw, start_pos=posT0, page_limit=limit_each)
+        t2, p2, posN1 = _plan_whole_manuals_for_one_printer(docs=docs_normal, start_pos=posN0, page_limit=limit_each)
+        endN = posN1
+        endT = posT1
+    elif typewriter_printer == 2:
+        t1, p1, posN1 = _plan_whole_manuals_for_one_printer(docs=docs_normal, start_pos=posN0, page_limit=limit_each)
+        t2, p2, posT1 = _plan_whole_manuals_for_one_printer(docs=docs_tw, start_pos=posT0, page_limit=limit_each)
+        endN = posN1
+        endT = posT1
+    else:
+        t1, t2, p1, p2, posN1 = _plan_whole_manuals_for_two_printers(
+            docs=docs_normal,
+            start_pos=posN0,
+            page_limit=limit_each,
+        )
+        endN = posN1
         endT = posT0
 
     endN = _advance_pos(docs_normal, endN)
@@ -2171,6 +2664,157 @@ def execute_print720(
     print("\n[print720] No eligible pages to print in this batch.")
 
 
+def print_task_to_manual_task(task: PrintTask, order_index: int = -1) -> Print360ManualTask:
+    total_pages = get_pdf_pagecount(task.pdf.path) or task.end_page
+    return Print360ManualTask(
+        order_index=order_index,
+        pdf=task.pdf,
+        print_path=task.pdf.path,
+        original_pages=total_pages,
+        padded_pages=total_pages + (total_pages % 2),
+        page_range=task.page_range,
+        padded=(total_pages % 2) == 1,
+    )
+
+
+def print_tasks_to_manual_tasks(tasks: List[PrintTask]) -> List[Print360ManualTask]:
+    return [print_task_to_manual_task(task, idx) for idx, task in enumerate(tasks)]
+
+
+def execute_print720_mixed(
+    *,
+    plan: Print720Plan,
+    printer1: str,
+    printer2: str,
+    printer1_name: str,
+    printer2_name: str,
+    printer1_mode: str,
+    printer2_mode: str,
+    pdfs: List[PdfEntry],
+    myprint_path: str,
+    python_exe: Optional[str],
+    myprint_module: Any,
+    print_settings: Dict[str, List[str]],
+    temp_dir: Path,
+    batch_no: int,
+    second_pass_only: bool,
+    quiet_printer1_name: str,
+    quiet_printer2_name: str,
+    inventory: Optional[ManualsInventory] = None,
+    skip_collector: Optional[InventorySkipCollector] = None,
+) -> None:
+    def is_manual(mode: str) -> bool:
+        return mode == "manual2sided"
+
+    regular_futures = []
+    manual_second_pass_started = False
+
+    def run_regular(tasks: List[PrintTask], printer: str, tag: str) -> None:
+        _run_tasks_for_printer(
+            printer=printer,
+            tasks=tasks,
+            pdfs=pdfs,
+            myprint_path=myprint_path,
+            python_exe=python_exe,
+            tag=tag,
+            inventory=inventory,
+            skip_collector=skip_collector,
+        )
+
+    def filter_inventory_skips(tasks: List[PrintTask], tag: str) -> List[PrintTask]:
+        if inventory is None:
+            return tasks
+
+        eligible: List[PrintTask] = []
+        for task in tasks:
+            hits = inventory.lookup_pdf(task.pdf)
+            if hits:
+                location = inventory_location_summary(hits)
+                print(f"\n[inventory] SKIP printing '{task.pdf.base}' on {tag} because it is already in manuals.csv")
+                print(f"[inventory] Location/info: {location}")
+                if skip_collector is not None:
+                    skip_collector.add(
+                        SkippedInventoryRecord(
+                            pdf_base=task.pdf.base,
+                            pdf_path=str(task.pdf.path),
+                            location=location,
+                        )
+                    )
+                continue
+            eligible.append(task)
+        return eligible
+
+    def run_manual_first_pass(tasks: List[PrintTask], printer_name: str, tag: str) -> Tuple[str, List[Tuple[Print360ManualTask, List[str]]], List[str]]:
+        tasks = filter_inventory_skips(tasks, tag)
+        if not tasks:
+            return tag, [], []
+
+        manual_tasks = print_tasks_to_manual_tasks(tasks)
+        if second_pass_only:
+            prepare_tasks_for_batch_manual_2sided(
+                myprint_module=myprint_module,
+                print_settings=print_settings,
+                tasks=manual_tasks,
+                temp_dir=temp_dir,
+                label="print720mixed",
+            )
+            jobs, simplex = collect_print360_manual_second_pass_jobs(
+                myprint_module=myprint_module,
+                print_settings=print_settings,
+                tasks=manual_tasks,
+            )
+        else:
+            jobs, simplex = execute_print360_manual_first_pass_batch_with_background_preparation(
+                myprint_module=myprint_module,
+                print_settings=print_settings,
+                tasks=manual_tasks,
+                printer_name=printer_name,
+                batch_no=batch_no,
+                temp_dir=temp_dir,
+                pages_planned=sum(t.pages for t in tasks),
+            )
+        return tag, jobs, simplex
+
+    print("\n[print720mixed] Mixed Print720 plan:")
+    print(f"  Printer 1 mode: {printer1_mode}  pages={plan.printed_p1}")
+    print(f"  Printer 2 mode: {printer2_mode}  pages={plan.printed_p2}")
+
+    def handle_manual_side(tasks: List[PrintTask], printer_name: str, tag: str) -> bool:
+        manual_tag, jobs, simplex = run_manual_first_pass(tasks, printer_name, tag)
+        if jobs:
+            execute_print720_manual_second_pass(
+                myprint_module=myprint_module,
+                second_pass_jobs=[(manual_tag, task, settings) for task, settings in jobs],
+                simplex_pages=simplex,
+                quiet_printer1_name=quiet_printer1_name,
+                quiet_printer2_name=quiet_printer2_name,
+                second_pass_only=second_pass_only,
+            )
+            return True
+        if second_pass_only:
+            print("\n[print720mixed] No manual second-pass jobs were found.")
+        return False
+
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        if plan.tasks_p1:
+            if not is_manual(printer1_mode) and not second_pass_only:
+                regular_futures.append(ex.submit(run_regular, plan.tasks_p1, printer1, "P1"))
+        if plan.tasks_p2:
+            if not is_manual(printer2_mode) and not second_pass_only:
+                regular_futures.append(ex.submit(run_regular, plan.tasks_p2, printer2, "P2"))
+
+        if plan.tasks_p1 and is_manual(printer1_mode):
+            manual_second_pass_started = handle_manual_side(plan.tasks_p1, printer1_name, "p1") or manual_second_pass_started
+        if plan.tasks_p2 and is_manual(printer2_mode):
+            manual_second_pass_started = handle_manual_side(plan.tasks_p2, printer2_name, "p2") or manual_second_pass_started
+
+        for fut in as_completed(regular_futures):
+            fut.result()
+
+    if second_pass_only and not manual_second_pass_started:
+        print("\n[print720mixed] No manual second-pass jobs were found.")
+
+
 # =============================================================================
 # Reporting helpers
 # =============================================================================
@@ -2206,14 +2850,14 @@ def main():
     ap.add_argument(
         "--pdf-folder",
         type=Path,
-        default=Path(r"c:\Users\Admin\Downloads\ebay_manuals"),
-        help="Folder containing PDFs (default: c:\\Users\\Admin\\Downloads\\ebay_manuals)",
+        default=Path(r"c:\Users\benoi\Downloads\ebay_manuals"),
+        help="Folder containing PDFs (default: c:\\Users\\benoi\\Downloads\\ebay_manuals; falls back to Admin)",
     )
     ap.add_argument(
         "--pdf-folder2",
         type=Path,
-        default=Path(r"c:\Users\Admin\Downloads\Manuals"),
-        help="Optional second PDF folder (default: c:\\Users\\Admin\\Downloads\\Manuals)",
+        default=Path(r"c:\Users\benoi\Downloads\manuals"),
+        help="Optional second PDF folder (default: c:\\Users\\benoi\\Downloads\\manuals; falls back to Admin)",
     )
     ap.add_argument("--recursive", action="store_true", help="Scan PDFs recursively under both folders")
 
@@ -2248,8 +2892,20 @@ def main():
                     help="Special mode: dry-run split then print ~360 pages on printer1 and ~360 on printer2 concurrently.")
     ap.add_argument("--print720manual2sided", action="store_true",
                     help="Special mode: print720-style manual two-sided batches, assigning whole manuals evenly across two printers.")
+    ap.add_argument("--print720mixed", action="store_true",
+                    help="Special mode: Print720 with each printer set to regular or manual two-sided independently.")
+    ap.add_argument("--printer1-mode", choices=("regular", "manual2sided"), default="regular",
+                    help="For --print720mixed: mode for printer 1.")
+    ap.add_argument("--printer2-mode", choices=("regular", "manual2sided"), default="regular",
+                    help="For --print720mixed: mode for printer 2.")
     ap.add_argument("--secondpass", action="store_true",
-                    help="With --print360manual2sided or --print720manual2sided, run only the odd-page second pass.")
+                    help="With manual two-sided modes, run only the odd-page second pass.")
+    ap.add_argument("--quiet-second-pass", action="store_true",
+                    help="Use a matching Quiet printer for the Print360 manual second pass if installed.")
+    ap.add_argument("--printer1-quiet-second-pass", action="store_true",
+                    help="Use a matching Quiet printer for the first selected Print720 printer's manual second pass if installed.")
+    ap.add_argument("--printer2-quiet-second-pass", action="store_true",
+                    help="Use a matching Quiet printer for the second selected Print720 printer's manual second pass if installed.")
     ap.add_argument(
         "--print720-state",
         type=Path,
@@ -2335,13 +2991,7 @@ def main():
             if not printer_name:
                 print(f"[print360manual2sided] ERROR: unknown printer {default_printer!r}")
                 sys.exit(2)
-            quiet_printer_name = f"{printer_name} Quiet"
-            if not myprint_module.printer_exists(quiet_printer_name):
-                print("\n[print360manual2sided] Manual two-sided mode requires a quiet printer named:")
-                print(quiet_printer_name)
-                print("No matching quiet printer was found, so the first pass will not start.")
-                save_links_json(args.out_links_json, links)
-                return
+            quiet_printer_name = myprint_module.select_second_pass_printer(printer_name, args.quiet_second_pass)
 
             print_settings = load_print_settings_for_myprint(myprint_module)
             next_idx = 0
@@ -2446,6 +3096,136 @@ def main():
             save_links_json(args.out_links_json, links)
             return
 
+        if args.print720mixed:
+            printer1 = default_printer
+            printer2 = (args.printer2 or "").strip()
+
+            if not printer1:
+                printer1 = input("\n[print720mixed] Printer 1 number (e.g. 1): ").strip()
+            if not printer2:
+                printer2 = input("[print720mixed] Printer 2 number (e.g. 2): ").strip()
+            if not printer1:
+                print("[print720mixed] ERROR: printer1 is required.")
+                sys.exit(2)
+            if not printer2:
+                print("[print720mixed] ERROR: printer2 is required.")
+                sys.exit(2)
+
+            printer1_mode = args.printer1_mode
+            printer2_mode = args.printer2_mode
+            if printer1_mode == printer2_mode:
+                print("[print720mixed] ERROR: mixed mode requires one regular printer and one manual2sided printer.")
+                sys.exit(2)
+
+            myprint_module = load_myprint_module(args.myprint)
+            printer1_name = resolve_printer_name(myprint_module, printer1)
+            printer2_name = resolve_printer_name(myprint_module, printer2)
+            if not printer1_name or not printer2_name:
+                print("[print720mixed] ERROR: unknown printer selection.")
+                sys.exit(2)
+
+            quiet_printer1_name = myprint_module.select_second_pass_printer(
+                printer1_name, printer1_mode == "manual2sided" and args.printer1_quiet_second_pass,
+            )
+            quiet_printer2_name = myprint_module.select_second_pass_printer(
+                printer2_name, printer2_mode == "manual2sided" and args.printer2_quiet_second_pass,
+            )
+
+            print_settings = load_print_settings_for_myprint(myprint_module)
+            typewriter_printer = int(args.typewriter or 0)
+            state_path: Path = args.print720_state
+
+            if args.print720_reset:
+                reset_print720_state(state_path)
+
+            st = load_print720_state(state_path)
+            posN = st.normal_pos()
+            posT = st.typewriter_pos()
+            batch_no = 1
+
+            print(
+                f"\n[print720mixed] Starting from state:"
+                f"\n  NORMAL:     doc_list_index={posN.doc_list_index}, next_page={posN.next_page}"
+                f"\n  TYPEWRITER: doc_list_index={posT.doc_list_index}, next_page={posT.next_page}"
+            )
+            print(f"[print720mixed] State file: {state_path.resolve()}")
+            print(f"[print720mixed] Printer 1 mode: {printer1_mode}")
+            print(f"[print720mixed] Printer 2 mode: {printer2_mode}")
+
+            with tempfile.TemporaryDirectory(prefix="print720mixed_") as td:
+                temp_dir = Path(td)
+                while True:
+                    plan = plan_print720_mixed_whole_manuals(
+                        orders=orders,
+                        itemid_index=itemid_index,
+                        itemid_typewriter=itemid_typewriter,
+                        pdf_by_normbase=pdf_by_normbase,
+                        start_pos_normal=posN,
+                        start_pos_typewriter=posT,
+                        limit_each=360,
+                        typewriter_printer=typewriter_printer,
+                        inventory=inventory,
+                        skip_collector=skip_collector,
+                    )
+
+                    _print_plan_summary(plan, typewriter_printer)
+                    total_pages = plan.printed_p1 + plan.printed_p2
+                    if total_pages <= 0:
+                        print("\n[print720mixed] Nothing eligible to print. Exiting.")
+                        if not args.secondpass:
+                            save_print720_state(state_path, Print720State.from_positions(posN, posT))
+                        break
+
+                    execute_print720_mixed(
+                        plan=plan,
+                        printer1=printer1,
+                        printer2=printer2,
+                        printer1_name=printer1_name,
+                        printer2_name=printer2_name,
+                        printer1_mode=printer1_mode,
+                        printer2_mode=printer2_mode,
+                        pdfs=pdfs,
+                        myprint_path=args.myprint,
+                        python_exe=args.python,
+                        myprint_module=myprint_module,
+                        print_settings=print_settings,
+                        temp_dir=temp_dir,
+                        batch_no=batch_no,
+                        second_pass_only=args.secondpass,
+                        quiet_printer1_name=quiet_printer1_name,
+                        quiet_printer2_name=quiet_printer2_name,
+                        inventory=inventory,
+                        skip_collector=skip_collector,
+                    )
+
+                    if args.secondpass:
+                        print("[print720mixed] Second-pass-only mode complete; progress state was not advanced.")
+                        break
+
+                    posN = plan.end_pos_normal
+                    posT = plan.end_pos_typewriter
+                    save_print720_state(state_path, Print720State.from_positions(posN, posT))
+
+                    has_more = plan.has_more_normal or plan.has_more_typewriter
+                    if has_more:
+                        ans = input("\n[print720mixed] Do you want to continue printing the next batch? [y/N]: ").strip().lower()
+                        if not ans.startswith("y"):
+                            print("[print720mixed] Stopping now; progress saved for next run.")
+                            break
+                    else:
+                        print("\n[print720mixed] No more eligible pages after this batch. Done.")
+                        try:
+                            if state_path.exists():
+                                state_path.unlink()
+                        except Exception as e:
+                            print(f"[print720mixed] WARNING: failed to delete state file {state_path}: {e}")
+                        break
+
+                    batch_no += 1
+
+            save_links_json(args.out_links_json, links)
+            return
+
         if args.print720manual2sided:
             printer1 = default_printer
             printer2 = (args.printer2 or "").strip()
@@ -2468,19 +3248,12 @@ def main():
                 print("[print720manual2sided] ERROR: unknown printer selection.")
                 sys.exit(2)
 
-            quiet_printer1_name = f"{printer1_name} Quiet"
-            quiet_printer2_name = f"{printer2_name} Quiet"
-            missing_quiet = [p for p in (quiet_printer1_name, quiet_printer2_name) if not myprint_module.printer_exists(p)]
-            if missing_quiet:
-                print("\n[print720manual2sided] Manual two-sided mode requires these quiet printers:")
-                print(quiet_printer1_name)
-                print(quiet_printer2_name)
-                print("Missing quiet printer(s):")
-                for p in missing_quiet:
-                    print(p)
-                print("Printing will not start.")
-                save_links_json(args.out_links_json, links)
-                return
+            quiet_printer1_name = myprint_module.select_second_pass_printer(
+                printer1_name, args.printer1_quiet_second_pass,
+            )
+            quiet_printer2_name = myprint_module.select_second_pass_printer(
+                printer2_name, args.printer2_quiet_second_pass,
+            )
 
             print_settings = load_print_settings_for_myprint(myprint_module)
             next_idx = 0
